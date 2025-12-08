@@ -92,7 +92,8 @@ set -e  # Re-enable exit on error
 
 # Upgrade pip (using system Python)
 echo "⬆️  Upgrading pip..."
-python3 -m pip install --upgrade pip setuptools wheel --user
+echo "   Note: Using --break-system-packages flag (required on newer Raspberry Pi OS)"
+python3 -m pip install --upgrade pip setuptools wheel --break-system-packages
 
 # Install Python dependencies
 echo "📚 Installing Python dependencies..."
@@ -100,17 +101,17 @@ echo "   This may take several minutes on Raspberry Pi..."
 
 # Install core dependencies first (these don't need libcap-dev)
 echo "   Installing core packages (ultralytics, numpy, Pillow)..."
-python3 -m pip install --no-cache-dir --user ultralytics numpy Pillow
+python3 -m pip install --no-cache-dir --break-system-packages ultralytics numpy Pillow
 
 # Install picamera2 separately (requires libcap-dev)
 echo "   Installing picamera2 (requires libcap-dev)..."
 if [ "$LIBCAP_INSTALLED" = false ]; then
     echo "   ⚠️  WARNING: libcap-dev not installed. picamera2 installation may fail."
-    echo "   If it fails, install libcap-dev manually and run: python3 -m pip install picamera2"
+    echo "   If it fails, install libcap-dev manually and run: python3 -m pip install --break-system-packages picamera2"
 fi
 
 set +e  # Don't exit on error for picamera2
-if python3 -m pip install --no-cache-dir --user picamera2 2>&1 | tee /tmp/picamera2_install.log; then
+if python3 -m pip install --no-cache-dir --break-system-packages picamera2 2>&1 | tee /tmp/picamera2_install.log; then
     echo "✅ picamera2 installed successfully"
     PICAMERA2_INSTALLED=true
 else
@@ -122,7 +123,7 @@ else
         echo ""
         echo "   SOLUTION: Install libcap-dev first:"
         echo "   sudo apt install -y libcap-dev"
-        echo "   Then run: python3 -m pip install --user picamera2"
+        echo "   Then run: python3 -m pip install --break-system-packages picamera2"
         echo ""
         echo "   Or try alternative package names:"
         echo "   sudo apt install -y libcap2-dev"
@@ -156,7 +157,7 @@ if python3 -c "from PIL import Image; print(f'✅ Pillow {Image.__version__} ins
     echo "✅ Pillow is ready to use"
 else
     echo "❌ Pillow installation failed. Trying to fix..."
-    python3 -m pip install --upgrade --no-cache-dir --user Pillow
+    python3 -m pip install --upgrade --no-cache-dir --break-system-packages Pillow
     if python3 -c "from PIL import Image" 2>/dev/null; then
         echo "✅ Pillow fixed"
     else

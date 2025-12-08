@@ -95,11 +95,14 @@ If you prefer manual installation or the script fails:
 
 2. **Install Python dependencies**:
    ```bash
-   python3 -m pip install --upgrade pip setuptools wheel --user
-   python3 -m pip install --user -r requirements.txt
+   python3 -m pip install --upgrade pip setuptools wheel --break-system-packages
+   python3 -m pip install --break-system-packages -r requirements.txt
    ```
    
-   This will install picamera2, ultralytics, Pillow, and numpy to your user directory.
+   **Note:** `--break-system-packages` flag is required on newer Raspberry Pi OS versions
+   that use PEP 668 (externally-managed-environment). This installs packages system-wide.
+   
+   This will install picamera2, ultralytics, Pillow, and numpy system-wide.
 
 4. **Verify YOLO model**:
    - The `yolov12n-face.pt` model should be in the same directory
@@ -319,11 +322,19 @@ class Config:
 
 6. **"No module named picamera2" error**:
    ```bash
-   python3 -m pip install --user picamera2
+   python3 -m pip install --break-system-packages picamera2
    ```
    This usually means:
    - picamera2 didn't install during setup: Re-run `./setup.sh`
-   - Or install manually: `python3 -m pip install --user picamera2`
+   - Or install manually: `python3 -m pip install --break-system-packages picamera2`
+
+7. **"externally-managed-environment" error**:
+   This error occurs on newer Raspberry Pi OS versions that protect system Python.
+   The setup script uses `--break-system-packages` flag to work around this.
+   If you see this error manually, add the flag:
+   ```bash
+   python3 -m pip install --break-system-packages package_name
+   ```
 
 7. **python-prctl build error** ("You need to install libcap development headers"):
    ```bash
@@ -351,7 +362,7 @@ class Config:
    - **Option 3**: Try alternative package: `sudo apt install -y libcap2-dev` or `libcap2`
    - **Option 4**: Update your system: `sudo apt update && sudo apt upgrade`
    - **Option 5**: Install build-essential first: `sudo apt install -y build-essential`
-   - **After fixing libcap-dev**: `python3 -m pip install --user picamera2`
+   - **After fixing libcap-dev**: `python3 -m pip install --break-system-packages picamera2`
 
 6. **Display/GUI errors**:
    - If running headless (no display), the system will still process frames
