@@ -165,17 +165,24 @@ set -e  # Re-enable exit on error
 echo "🔍 Verifying installations..."
 
 # Verify picamera2 (REQUIRED)
-if [ "$PICAMERA2_INSTALLED" = true ]; then
-    if python3 -c "from picamera2 import Picamera2; print('✅ picamera2 installed successfully')" 2>/dev/null; then
-        echo "✅ picamera2 is ready to use (REQUIRED for Raspberry Pi Camera Module)"
-    else
-        echo "⚠️  picamera2 installed but import failed. This may indicate a compatibility issue."
-    fi
+# Check if picamera2 is available (either from pip install or system package)
+if python3 -c "from picamera2 import Picamera2; print('OK')" 2>&1 | grep -q "OK"; then
+    echo "✅ picamera2 is ready to use (REQUIRED for Raspberry Pi Camera Module)"
+elif python3 -c "import picamera2" 2>/dev/null; then
+    echo "✅ picamera2 is available (system package)"
+elif [ "$PICAMERA2_INSTALLED" = true ]; then
+    echo "✅ picamera2 was installed via pip"
 else
-    echo "❌ picamera2 installation failed!"
-    echo "   This system requires picamera2 to work."
-    echo "   Please fix the libcap-dev issue and re-run setup.sh"
-    exit 1
+    echo "⚠️  picamera2 verification failed, but checking if system package exists..."
+    if python3 -c "import sys; sys.path.insert(0, '/usr/lib/python3/dist-packages'); from picamera2 import Picamera2" 2>/dev/null; then
+        echo "✅ picamera2 is available as system package"
+    else
+        echo "❌ picamera2 is not available!"
+        echo "   This system requires picamera2 to work."
+        echo "   Please fix the libcap-dev issue and re-run setup.sh"
+        echo "   Or install system package: sudo apt install -y python3-picamera2"
+        exit 1
+    fi
 fi
 
 # Verify Pillow

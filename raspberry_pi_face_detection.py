@@ -29,11 +29,15 @@ from PIL import Image, ImageDraw, ImageFont
 try:
     from picamera2 import Picamera2
     PICAMERA2_AVAILABLE = True
-except ImportError:
+except ImportError as e:
+    # Try to provide more helpful error message
     PICAMERA2_AVAILABLE = False
     Picamera2 = None
-    print("❌ picamera2 is required but not installed.")
-    print("   Install with: pip install picamera2")
+    print(f"❌ picamera2 import failed: {e}")
+    print("   picamera2 is required but could not be imported.")
+    print("   If installed via apt: sudo apt install -y python3-picamera2")
+    print("   If installing via pip: python3 -m pip install --break-system-packages picamera2")
+    print("   Check installation: python3 -c 'from picamera2 import Picamera2'")
     sys.exit(1)
 
 # ============================================================================
