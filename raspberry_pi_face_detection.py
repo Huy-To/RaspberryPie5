@@ -135,7 +135,8 @@ class RaspberryPiFaceDetector:
         self.processing_thread = None
         
         # Detection results cache
-        self.last_detections = []
+        self.last_boxes = []
+        self.last_scores = []
         self.last_detection_time = 0
         
         # Display window (tkinter)
@@ -305,7 +306,14 @@ class RaspberryPiFaceDetector:
         if self.model is None:
             return [], []
         
-        H, W = frame.shape[:2]
+        # Validate frame
+        if frame is None or (isinstance(frame, np.ndarray) and frame.size == 0):
+            return [], []
+        
+        try:
+            H, W = frame.shape[:2]
+        except (AttributeError, IndexError):
+            return [], []
         
         # Resize frame for faster processing
         if self.config.RESIZE_FACTOR != 1.0:
@@ -345,6 +353,18 @@ class RaspberryPiFaceDetector:
                         if scale_factor != 1.0:
                             boxes *= scale_factor
             
+            # Ensure we return lists, not numpy arrays
+            if isinstance(boxes, np.ndarray):
+                boxes = boxes.tolist()
+            if isinstance(scores, np.ndarray):
+                scores = scores.tolist()
+            
+            # Ensure boxes and scores are lists
+            if not isinstance(boxes, list):
+                boxes = list(boxes) if boxes else []
+            if not isinstance(scores, list):
+                scores = list(scores) if scores else []
+            
             return boxes, scores
             
         except Exception as e:
@@ -357,11 +377,28 @@ class RaspberryPiFaceDetector:
         
         Args:
             frame: Input frame (numpy array, RGB format)
-            boxes: List of bounding boxes
-            scores: List of confidence scores
+            boxes: List of bounding boxes (numpy array or list)
+            scores: List of confidence scores (numpy array or list)
         """
-        if len(boxes) == 0:
+        # Convert to lists if numpy arrays
+        if isinstance(boxes, np.ndarray):
+            boxes = boxes.tolist()
+        if isinstance(scores, np.ndarray):
+            scores = scores.tolist()
+        
+        # Ensure boxes and scores are lists
+        if not isinstance(boxes, list):
+            boxes = list(boxes) if boxes else []
+        if not isinstance(scores, list):
+            scores = list(scores) if scores else []
+        
+        # Safety check: ensure boxes and scores have same length
+        min_len = min(len(boxes), len(scores))
+        if min_len == 0:
             return frame
+        
+        boxes = boxes[:min_len]
+        scores = scores[:min_len]
         
         # Convert to PIL Image for drawing
         pil_image = Image.fromarray(frame)
@@ -377,24 +414,38 @@ class RaspberryPiFaceDetector:
                 font = ImageFont.load_default()
         
         for i, (box, score) in enumerate(zip(boxes, scores)):
-            x1, y1, x2, y2 = map(int, box)
-            
-            # Draw bounding box
-            draw.rectangle([x1, y1, x2, y2], outline=self.config.BOX_COLOR, width=2)
-            
-            # Draw confidence score
-            label = f"Face: {score:.2f}"
-            # Get text size for background
-            bbox = draw.textbbox((0, 0), label, font=font)
-            text_width = bbox[2] - bbox[0]
-            text_height = bbox[3] - bbox[1]
-            
-            # Draw background rectangle for text
-            draw.rectangle([x1, y1 - text_height - 4, x1 + text_width + 4, y1], 
-                          fill=self.config.BOX_COLOR)
-            
-            # Draw text
-            draw.text((x1 + 2, y1 - text_height - 2), label, fill=(0, 0, 0), font=font)
+            try:
+                # Ensure box is a list/array with 4 elements
+                if not box or len(box) < 4:
+                    continue
+                x1, y1, x2, y2 = map(int, box[:4])
+                
+                # Ensure score is a number
+                if isinstance(score, (np.ndarray, np.generic)):
+                    score = float(score)
+                else:
+                    score = float(score)
+                
+                # Draw bounding box
+                draw.rectangle([x1, y1, x2, y2], outline=self.config.BOX_COLOR, width=2)
+                
+                # Draw confidence score
+                label = f"Face: {score:.2f}"
+                
+                # Get text size for background
+                bbox = draw.textbbox((0, 0), label, font=font)
+                text_width = bbox[2] - bbox[0]
+                text_height = bbox[3] - bbox[1]
+                
+                # Draw background rectangle for text
+                draw.rectangle([x1, y1 - text_height - 4, x1 + text_width + 4, y1], 
+                              fill=self.config.BOX_COLOR)
+                
+                # Draw text
+                draw.text((x1 + 2, y1 - text_height - 2), label, fill=(0, 0, 0), font=font)
+            except (ValueError, TypeError, IndexError, AttributeError) as e:
+                # Skip this detection if there's an error
+                continue
         
         # Convert back to numpy array
         return np.array(pil_image)
@@ -406,59 +457,78 @@ class RaspberryPiFaceDetector:
         Args:
             frame: Input frame (numpy array, RGB format)
         """
-        if not self.config.SHOW_FPS and not self.config.SHOW_DETECTION_INFO:
+        if not self.config.SHOW_FPS and not self.config.SHOW_DETECTION_INFO and not self.config.SHOW_PERFORMANCE_STATS:
             return frame
         
-        # Convert to PIL Image
-        pil_image = Image.fromarray(frame)
-        draw = ImageDraw.Draw(pil_image)
+        # Validate frame
+        if frame is None or (isinstance(frame, np.ndarray) and frame.size == 0):
+            return frame
         
-        # Try to load a font
         try:
-            font = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", 14)
-        except:
+            # Convert to PIL Image
+            pil_image = Image.fromarray(frame)
+            draw = ImageDraw.Draw(pil_image)
+            
+            # Try to load a font
             try:
-                font = ImageFont.truetype("/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf", 14)
+                font = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", 14)
             except:
-                font = ImageFont.load_default()
-        
-        info_lines = []
-        y_offset = 10
-        
-        # FPS information
-        if self.config.SHOW_FPS:
-            info_lines.append(f"FPS: {self.current_fps:.1f}")
-        
-        # Detection information
-        if self.config.SHOW_DETECTION_INFO:
-            info_lines.append(f"Faces: {len(self.last_detections)}")
-            if self.processing_times:
-                avg_time = np.mean(self.processing_times[-10:])  # Last 10 frames
-                info_lines.append(f"Avg Time: {avg_time*1000:.1f}ms")
-        
-        # Performance stats
-        if self.config.SHOW_PERFORMANCE_STATS:
-            info_lines.append(f"Frame: {self.frame_count}")
-            info_lines.append(f"Queue: {self.frame_queue.qsize()}")
-        
-        # Draw information
-        for i, line in enumerate(info_lines):
-            # Draw text with outline for visibility
-            x, y = 10, y_offset + i * 20
-            draw.text((x, y), line, fill=self.config.TEXT_COLOR, font=font)
-        
-        # Convert back to numpy array
-        return np.array(pil_image)
+                try:
+                    font = ImageFont.truetype("/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf", 14)
+                except:
+                    font = ImageFont.load_default()
+            
+            info_lines = []
+            y_offset = 10
+            
+            # FPS information
+            if self.config.SHOW_FPS:
+                info_lines.append(f"FPS: {self.current_fps:.1f}")
+            
+            # Detection information
+            if self.config.SHOW_DETECTION_INFO:
+                num_faces = len(self.last_boxes) if isinstance(self.last_boxes, (list, np.ndarray)) else 0
+                info_lines.append(f"Faces: {num_faces}")
+                if self.processing_times and len(self.processing_times) > 0:
+                    try:
+                        avg_time = np.mean(self.processing_times[-10:])  # Last 10 frames
+                        info_lines.append(f"Avg Time: {avg_time*1000:.1f}ms")
+                    except (ValueError, TypeError):
+                        pass  # Skip if calculation fails
+            
+            # Performance stats
+            if self.config.SHOW_PERFORMANCE_STATS:
+                info_lines.append(f"Frame: {self.frame_count}")
+                info_lines.append(f"Queue: {self.frame_queue.qsize()}")
+            
+            # Draw information
+            for i, line in enumerate(info_lines):
+                # Draw text with outline for visibility
+                x, y = 10, y_offset + i * 20
+                draw.text((x, y), line, fill=self.config.TEXT_COLOR, font=font)
+            
+            # Convert back to numpy array
+            return np.array(pil_image)
+        except Exception as e:
+            # Return original frame if there's an error
+            return frame
     
     def calculate_fps(self):
         """Calculate current FPS"""
         self.fps_counter += 1
         current_time = time.time()
         
-        if current_time - self.fps_start_time >= 1.0:  # Update every second
-            self.current_fps = self.fps_counter / (current_time - self.fps_start_time)
-            self.fps_counter = 0
-            self.fps_start_time = current_time
+        try:
+            time_diff = current_time - self.fps_start_time
+            if time_diff >= 1.0:  # Update every second
+                if time_diff > 0:
+                    self.current_fps = self.fps_counter / time_diff
+                else:
+                    self.current_fps = 0.0
+                self.fps_counter = 0
+                self.fps_start_time = current_time
+        except (ZeroDivisionError, ValueError):
+            self.current_fps = 0.0
     
     def process_frames_parallel(self):
         """Process frames in a separate thread for parallel processing"""
@@ -509,9 +579,16 @@ class RaspberryPiFaceDetector:
                         print("⚠️  Warning: Empty frame from picamera2")
                         time.sleep(0.1)
                         continue
+                    
+                    # Validate frame shape
+                    if len(frame.shape) < 2 or frame.shape[0] == 0 or frame.shape[1] == 0:
+                        print("⚠️  Warning: Invalid frame shape from picamera2")
+                        time.sleep(0.1)
+                        continue
                 except Exception as e:
                     print(f"❌ Error reading frame from picamera2: {e}")
-                    break
+                    time.sleep(0.1)
+                    continue  # Continue instead of breaking to be more resilient
                 
                 self.frame_count += 1
                 
@@ -532,7 +609,15 @@ class RaspberryPiFaceDetector:
                         # Get results from result queue
                         try:
                             processed_frame, boxes, scores, processing_time, frame_id = self.result_queue.get_nowait()
-                            self.last_detections = boxes
+                            # Convert to lists if numpy arrays
+                            if isinstance(boxes, np.ndarray):
+                                self.last_boxes = boxes.tolist()
+                            else:
+                                self.last_boxes = list(boxes) if boxes else []
+                            if isinstance(scores, np.ndarray):
+                                self.last_scores = scores.tolist()
+                            else:
+                                self.last_scores = list(scores) if scores else []
                             self.last_detection_time = time.time()
                             self.processing_times.append(processing_time)
                             
@@ -545,14 +630,23 @@ class RaspberryPiFaceDetector:
                         except queue.Empty:
                             # Use cached results if no new results available
                             if time.time() - self.last_detection_time < 0.5:  # Use cache for 0.5 seconds
-                                frame = self.draw_detections(frame, self.last_detections, [0.9] * len(self.last_detections))
+                                cached_scores = self.last_scores if len(self.last_scores) == len(self.last_boxes) else [0.9] * len(self.last_boxes)
+                                frame = self.draw_detections(frame, self.last_boxes, cached_scores)
                     else:
                         # Synchronous processing
                         if should_process:
                             start_time = time.time()
                             boxes, scores = self.detect_faces(frame)
                             processing_time = time.time() - start_time
-                            self.last_detections = boxes
+                            # Convert to lists if numpy arrays
+                            if isinstance(boxes, np.ndarray):
+                                self.last_boxes = boxes.tolist()
+                            else:
+                                self.last_boxes = list(boxes) if boxes else []
+                            if isinstance(scores, np.ndarray):
+                                self.last_scores = scores.tolist()
+                            else:
+                                self.last_scores = list(scores) if scores else []
                             self.last_detection_time = time.time()
                             self.processing_times.append(processing_time)
                             
@@ -571,22 +665,40 @@ class RaspberryPiFaceDetector:
                 
                 # Print to console if enabled
                 if self.config.PRINT_TO_CONSOLE and should_process:
-                    if len(self.last_detections) > 0:
-                        print(f"Frame {self.frame_count}: {len(self.last_detections)} face(s) detected | "
+                    num_faces = len(self.last_boxes) if isinstance(self.last_boxes, (list, np.ndarray)) else 0
+                    if num_faces > 0:
+                        # Format scores safely
+                        try:
+                            # Convert scores to list of floats
+                            score_list = []
+                            for s in self.last_scores:
+                                if isinstance(s, (np.ndarray, np.generic)):
+                                    score_list.append(float(s))
+                                else:
+                                    score_list.append(float(s))
+                            scores_str = [f'{s:.2f}' for s in score_list]
+                        except (ValueError, TypeError):
+                            scores_str = ['N/A'] * num_faces
+                        
+                        print(f"Frame {self.frame_count}: {num_faces} face(s) detected | "
                               f"FPS: {self.current_fps:.1f} | "
-                              f"Confidence: {[f'{s:.2f}' for s in self.last_detections]}")
+                              f"Confidence: {scores_str}")
                 
                 # Add pause indicator
                 if paused:
-                    pil_image = Image.fromarray(frame)
-                    draw = ImageDraw.Draw(pil_image)
                     try:
-                        font = ImageFont.load_default()
-                    except:
-                        font = None
-                    draw.text((10, frame.shape[0] - 20), "PAUSED - Press Ctrl+C to quit", 
-                             fill=self.config.WARNING_COLOR, font=font)
-                    frame = np.array(pil_image)
+                        pil_image = Image.fromarray(frame)
+                        draw = ImageDraw.Draw(pil_image)
+                        try:
+                            font = ImageFont.load_default()
+                        except:
+                            font = None
+                        frame_height = frame.shape[0] if isinstance(frame, np.ndarray) else pil_image.height
+                        draw.text((10, frame_height - 20), "PAUSED - Press Ctrl+C to quit", 
+                                 fill=self.config.WARNING_COLOR, font=font)
+                        frame = np.array(pil_image)
+                    except Exception:
+                        pass  # Skip pause indicator if there's an error
                 
                 # Update display window
                 self.update_display(frame)
