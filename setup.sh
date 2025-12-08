@@ -127,7 +127,19 @@ echo "   This may take several minutes on Raspberry Pi..."
 
 # Install core dependencies first (these don't need libcap-dev)
 echo "   Installing core packages (ultralytics, numpy, Pillow)..."
-python3 -m pip install --no-cache-dir --break-system-packages --no-warn-script-location ultralytics numpy Pillow
+echo "   Note: Using system numpy if available to avoid version conflicts with picamera2"
+
+# Check if system numpy is available and compatible
+if python3 -c "import numpy; print(numpy.__version__)" 2>/dev/null | grep -q "."; then
+    SYSTEM_NUMPY_VERSION=$(python3 -c "import numpy; print(numpy.__version__)" 2>/dev/null)
+    echo "   System numpy version: $SYSTEM_NUMPY_VERSION"
+    echo "   Will use system numpy to avoid conflicts with system picamera2"
+    # Install ultralytics and Pillow, but let numpy use system version
+    python3 -m pip install --no-cache-dir --break-system-packages --no-warn-script-location ultralytics Pillow
+else
+    # No system numpy, install via pip
+    python3 -m pip install --no-cache-dir --break-system-packages --no-warn-script-location ultralytics numpy Pillow
+fi
 
 # Install picamera2 separately (requires libcap-dev)
 echo "   Installing picamera2 (requires libcap-dev)..."
@@ -182,6 +194,25 @@ else
         echo "   Please fix the libcap-dev issue and re-run setup.sh"
         echo "   Or install system package: sudo apt install -y python3-picamera2"
         exit 1
+    fi
+fi
+
+# Verify numpy compatibility
+echo "🔍 Checking numpy compatibility with picamera2..."
+if python3 -c "import numpy; import picamera2; print('✅ numpy and picamera2 are compatible')" 2>/dev/null; then
+    NUMPY_VERSION=$(python3 -c "import numpy; print(numpy.__version__)" 2>/dev/null)
+    echo "✅ numpy $NUMPY_VERSION is compatible with picamera2"
+else
+    echo "⚠️  numpy version conflict detected!"
+    echo "   System picamera2 may be incompatible with pip-installed numpy"
+    echo "   Attempting to fix by using system numpy..."
+    # Try to uninstall pip numpy and use system version
+    python3 -m pip uninstall -y numpy 2>/dev/null || true
+    if python3 -c "import numpy; import picamera2; print('OK')" 2>/dev/null; then
+        echo "✅ Fixed: Now using system numpy"
+    else
+        echo "⚠️  Warning: numpy compatibility issue may persist"
+        echo "   You may need to reinstall picamera2 or use system packages"
     fi
 fi
 

@@ -3,7 +3,9 @@
 
 # Core dependencies for face detection
 ultralytics>=8.0.0
-numpy>=1.24.0
+# Note: numpy is often installed as system package - if you have system picamera2,
+# use system numpy to avoid version conflicts. Only install via pip if needed.
+# numpy>=1.24.0
 
 # Raspberry Pi Camera Module support (REQUIRED)
 picamera2>=0.3.12

@@ -341,7 +341,22 @@ class Config:
    python3 -m pip install --break-system-packages --no-warn-script-location package_name
    ```
 
-8. **PATH warnings** ("script is installed in '/home/pi/.local/bin' which is not on PATH"):
+8. **numpy version incompatibility error** ("numpy.dtype size changed"):
+   ```bash
+   # Quick fix - run this script
+   chmod +x fix_numpy.sh
+   ./fix_numpy.sh
+   
+   # Or manually:
+   # Uninstall pip numpy and use system version
+   python3 -m pip uninstall -y numpy
+   # Or install compatible version
+   python3 -m pip install --break-system-packages "numpy<2.0"
+   ```
+   This happens when system picamera2 (compiled against older numpy) conflicts with 
+   newer pip-installed numpy. The fix script resolves this automatically.
+
+9. **PATH warnings** ("script is installed in '/home/pi/.local/bin' which is not on PATH"):
    The setup script automatically adds `~/.local/bin` to your PATH.
    If you still see warnings:
    ```bash
