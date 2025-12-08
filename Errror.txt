@@ -166,3 +166,22 @@ Traceback (most recent call last):
 ImportError: cannot import name 'ImageTk' from 'PIL' (/usr/lib/python3/dist-packages/PIL/__init__.py)
 
 
+
+🧹 Cleaning up...
+✅ Cleanup complete
+Traceback (most recent call last):
+  File "/home/pi/RaspberryPie5/raspberry_pi_face_detection.py", line 682, in <module>
+    main()
+  File "/home/pi/RaspberryPie5/raspberry_pi_face_detection.py", line 679, in main
+    detector.run()
+  File "/home/pi/RaspberryPie5/raspberry_pi_face_detection.py", line 577, in run
+    f"Confidence: {[f'{s:.2f}' for s in self.last_detections]}")
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/pi/RaspberryPie5/raspberry_pi_face_detection.py", line 577, in <listcomp>
+    f"Confidence: {[f'{s:.2f}' for s in self.last_detections]}")
+                    ^^^^^^^^^^
+TypeError: unsupported format string passed to numpy.ndarray.__format__
+
+
+
+
