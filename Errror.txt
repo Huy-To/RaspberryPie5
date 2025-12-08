@@ -92,3 +92,70 @@ Traceback (most recent call last):
 ValueError: numpy.dtype size changed, may indicate binary incompatibility. Expected 96 from C header, got 88 from PyObject
 
 👋 Face detection system stopped.
+
+
+
+pi@raspberrypi:~/RaspberryPie5 $ ./run.sh
+🎬 Starting Raspberry Pi 5 Face Detection System...
+=================================================
+🔍 Checking picamera2 installation...
+✅ picamera2 is installed (detected via package manager)
+   Continuing - import will be tested when script runs
+🚀 Launching face detection system...
+
+📋 Controls:
+   - 'q' or ESC: Quit
+   - 'r': Reset FPS counter
+   - 'f': Toggle FPS display
+   - 'd': Toggle detection info
+   - 's': Toggle performance stats
+   - 'c': Toggle confidence threshold
+   - SPACE: Pause/Resume
+
+⚡ Performance Tips:
+   - Lower camera resolution for better FPS
+   - Increase frame skipping for less CPU usage
+   - Adjust resize factor for speed vs accuracy
+
+Traceback (most recent call last):
+  File "/home/pi/RaspberryPie5/raspberry_pi_face_detection.py", line 30, in <module>
+    from picamera2 import Picamera2
+  File "/usr/lib/python3/dist-packages/picamera2/__init__.py", line 11, in <module>
+    from .picamera2 import Picamera2, Preview
+  File "/usr/lib/python3/dist-packages/picamera2/picamera2.py", line 30, in <module>
+    from picamera2.encoders import Encoder, H264Encoder, MJPEGEncoder, Quality
+  File "/usr/lib/python3/dist-packages/picamera2/encoders/__init__.py", line 7, in <module>
+    from .encoder import Encoder, Quality
+  File "/usr/lib/python3/dist-packages/picamera2/encoders/encoder.py", line 13, in <module>
+    from ..request import _MappedBuffer
+  File "/usr/lib/python3/dist-packages/picamera2/request.py", line 13, in <module>
+    import simplejpeg
+  File "/usr/lib/python3/dist-packages/simplejpeg/__init__.py", line 1, in <module>
+    from ._jpeg import encode_jpeg, encode_jpeg_yuv_planes
+  File "simplejpeg/_jpeg.pyx", line 1, in init simplejpeg._jpeg
+ValueError: numpy.dtype size changed, may indicate binary incompatibility. Expected 96 from C header, got 88 from PyObject
+
+👋 Face detection system stopped.
+
+
+
+pi@raspberrypi:~/RaspberryPie5 $ rpicam-hello
+[2:00:05.081938670] [19393]  INFO Camera camera_manager.cpp:330 libcamera v0.5.2+99-bfd68f78
+[2:00:05.098708553] [19396]  INFO RPI pisp.cpp:720 libpisp version v1.2.1 981977ff21f3 29-04-2025 (14:13:50)
+[2:00:05.103908719] [19396]  INFO IPAProxy ipa_proxy.cpp:180 Using tuning file /usr/share/libcamera/ipa/rpi/pisp/imx219.json
+[2:00:05.113855460] [19396]  INFO Camera camera_manager.cpp:220 Adding camera '/base/axi/pcie@1000120000/rp1/i2c@80000/imx219@10' for pipeline handler rpi/pisp
+[2:00:05.113916145] [19396]  INFO RPI pisp.cpp:1179 Registered camera /base/axi/pcie@1000120000/rp1/i2c@80000/imx219@10 to CFE device /dev/media3 and ISP device /dev/media1 using PiSP variant BCM2712_C0
+Made X/EGL preview window
+Mode selection for 1640:1232:12:P
+    SRGGB10_CSI2P,640x480/0 - Score: 4504.81
+    SRGGB10_CSI2P,1640x1232/0 - Score: 1000
+    SRGGB10_CSI2P,1920x1080/0 - Score: 1541.48
+    SRGGB10_CSI2P,3280x2464/0 - Score: 1718
+    SRGGB8,640x480/0 - Score: 5504.81
+    SRGGB8,1640x1232/0 - Score: 2000
+    SRGGB8,1920x1080/0 - Score: 2541.48
+    SRGGB8,3280x2464/0 - Score: 2718
+Stream configuration adjusted
+[2:00:05.243674204] [19393]  INFO Camera camera.cpp:1215 configuring streams: (0) 1640x1232-YUV420/sYCC (1) 1640x1232-BGGR_PISP_COMP1/RAW
+[2:00:05.243856240] [19396]  INFO RPI pisp.cpp:1483 Sensor: /base/axi/pcie@1000120000/rp1/i2c@80000/imx219@10 - Selected sensor format: 1640x1232-SBGGR10_1X10/RAW - Selected CFE format: 1640x1232-PC1B/RAW
+
