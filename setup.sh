@@ -33,7 +33,9 @@ sudo apt update
 echo "🔧 Installing essential system dependencies..."
 sudo apt install -y \
     python3-pip \
-    python3-dev
+    python3-dev \
+    python3-tk \
+    python3-pil.imagetk
 
 # Try to install optional packages (continue if they fail)
 echo "🔧 Installing optional system dependencies (if available)..."

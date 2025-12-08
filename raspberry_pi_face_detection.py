@@ -23,14 +23,33 @@ from ultralytics import YOLO
 import argparse
 import sys
 from pathlib import Path
-from PIL import Image, ImageDraw, ImageFont, ImageTk
+from PIL import Image, ImageDraw, ImageFont
+
+# Try to import ImageTk (requires both Pillow and tkinter)
+try:
+    from PIL import ImageTk
+    IMAGETK_AVAILABLE = True
+except ImportError:
+    IMAGETK_AVAILABLE = False
+    ImageTk = None
+
+# Try to import tkinter
 try:
     import tkinter as tk
     TKINTER_AVAILABLE = True
 except ImportError:
     TKINTER_AVAILABLE = False
     tk = None
-    print("⚠️  Warning: tkinter not available. Display window will not be shown.")
+
+# Display is only available if both tkinter and ImageTk are available
+DISPLAY_AVAILABLE = TKINTER_AVAILABLE and IMAGETK_AVAILABLE
+
+if not DISPLAY_AVAILABLE:
+    if not TKINTER_AVAILABLE:
+        print("⚠️  Warning: tkinter not available. Display window will not be shown.")
+    elif not IMAGETK_AVAILABLE:
+        print("⚠️  Warning: ImageTk not available. Display window will not be shown.")
+        print("   Install with: sudo apt install -y python3-pil.imagetk")
 
 # Import picamera2 for Raspberry Pi Camera Module
 try:
@@ -200,8 +219,12 @@ class RaspberryPiFaceDetector:
     
     def initialize_display(self):
         """Initialize tkinter display window"""
-        if not TKINTER_AVAILABLE:
-            print("⚠️  tkinter not available - running in console-only mode")
+        if not DISPLAY_AVAILABLE:
+            if not TKINTER_AVAILABLE:
+                print("⚠️  tkinter not available - running in console-only mode")
+            elif not IMAGETK_AVAILABLE:
+                print("⚠️  ImageTk not available - running in console-only mode")
+                print("   Install with: sudo apt install -y python3-pil.imagetk")
             self.display_enabled = False
             return
         
@@ -229,6 +252,9 @@ class RaspberryPiFaceDetector:
             frame: PIL Image or numpy array (RGB format)
         """
         if not self.display_enabled or self.root is None or self.display_label is None:
+            return
+        
+        if not IMAGETK_AVAILABLE:
             return
         
         try:

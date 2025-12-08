@@ -54,7 +54,7 @@ A real-time face detection system optimized for Raspberry Pi 5 using YOLOv12n-fa
 - Python 3.8 or higher
 - Camera enabled in raspi-config
 - **picamera2 library** (installed automatically)
-- **tkinter** (usually pre-installed with Python, required for display window)
+- **tkinter** and **python3-pil.imagetk** (installed automatically by setup script, required for display window)
 
 ## 🛠️ Installation
 
@@ -404,7 +404,9 @@ class Config:
 
 6. **Display window not showing**:
    - **tkinter not available**: Install with `sudo apt install -y python3-tk`
-   - **Running headless**: The system will run in console-only mode if tkinter is not available
+   - **ImageTk not available**: Install with `sudo apt install -y python3-pil.imagetk`
+   - **Both required**: You need both `python3-tk` and `python3-pil.imagetk` for the display window
+   - **Running headless**: The system will run in console-only mode if display dependencies are not available
    - **SSH without display**: Use X11 forwarding: `ssh -X pi@your-pi-ip`
    - **Remote desktop**: Use VNC for remote desktop access
    - **Note**: The system will still process frames and output to console even without the display window
