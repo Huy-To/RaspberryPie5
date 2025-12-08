@@ -10,6 +10,9 @@ ultralytics>=8.0.0
 opencv-python>=4.8.0
 numpy>=1.24.0
 
+# Raspberry Pi Camera Module support
+picamera2>=0.3.12
+
 # Note: pathlib and argparse are built-in Python modules (Python 3.4+)
 # No need to install them separately
 

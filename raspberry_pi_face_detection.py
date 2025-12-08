@@ -26,6 +26,14 @@ import os
 import sys
 from pathlib import Path
 
+# Try to import picamera2 for Raspberry Pi Camera Module
+try:
+    from picamera2 import Picamera2
+    PICAMERA2_AVAILABLE = True
+except ImportError:
+    PICAMERA2_AVAILABLE = False
+    Picamera2 = None
+
 # ============================================================================
 # CONFIGURATION
 # ============================================================================
@@ -39,6 +47,7 @@ class Config:
     IOU_THRESHOLD = 0.45
     
     # Camera settings
+    CAMERA_TYPE = "auto"  # "auto", "picamera2", or "opencv"
     CAMERA_INDEX = 0
     CAMERA_WIDTH = 640
     CAMERA_HEIGHT = 480
@@ -81,6 +90,8 @@ class RaspberryPiFaceDetector:
         self.config = config
         self.model = None
         self.cap = None
+        self.picam2 = None
+        self.camera_type = None  # "picamera2" or "opencv"
         
         # Performance tracking
         self.fps_counter = 0
@@ -132,48 +143,99 @@ class RaspberryPiFaceDetector:
             sys.exit(1)
     
     def initialize_camera(self):
-        """Initialize camera capture"""
-        try:
-            print("📹 Initializing camera...")
-            print(f"   Trying camera index: {self.config.CAMERA_INDEX}")
-            
-            self.cap = cv2.VideoCapture(self.config.CAMERA_INDEX)
-            
-            # For Raspberry Pi Camera Module, sometimes need to set backend
-            if not self.cap.isOpened():
-                # Try with V4L2 backend (common on Raspberry Pi)
-                self.cap = cv2.VideoCapture(self.config.CAMERA_INDEX, cv2.CAP_V4L2)
-            
-            if not self.cap.isOpened():
-                raise RuntimeError(
-                    f"Could not open camera at index {self.config.CAMERA_INDEX}.\n"
-                    f"Make sure your camera is connected and try:\n"
-                    f"  - USB webcam: --camera 0\n"
-                    f"  - Raspberry Pi Camera Module: may need different index or picamera2 library"
+        """Initialize camera capture - tries picamera2 first, then OpenCV"""
+        print("📹 Initializing camera...")
+        
+        # Determine camera type
+        camera_type = self.config.CAMERA_TYPE.lower()
+        
+        # Try picamera2 first (for Raspberry Pi Camera Module)
+        if (camera_type == "auto" or camera_type == "picamera2") and PICAMERA2_AVAILABLE:
+            try:
+                print("   Trying picamera2 (Raspberry Pi Camera Module)...")
+                self.picam2 = Picamera2()
+                
+                # Configure camera
+                config = self.picam2.create_preview_configuration(
+                    main={"size": (self.config.CAMERA_WIDTH, self.config.CAMERA_HEIGHT), "format": "RGB888"}
                 )
-            
-            # Set camera properties (may not work for all cameras)
-            self.cap.set(cv2.CAP_PROP_FRAME_WIDTH, self.config.CAMERA_WIDTH)
-            self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, self.config.CAMERA_HEIGHT)
-            self.cap.set(cv2.CAP_PROP_FPS, self.config.CAMERA_FPS)
-            
-            # Give camera time to adjust
-            time.sleep(0.5)
-            
-            # Get actual camera properties
-            actual_width = int(self.cap.get(cv2.CAP_PROP_FRAME_WIDTH))
-            actual_height = int(self.cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
-            actual_fps = self.cap.get(cv2.CAP_PROP_FPS)
-            
-            print(f"✅ Camera initialized: {actual_width}x{actual_height} @ {actual_fps:.1f} FPS")
-            
-        except Exception as e:
-            print(f"❌ Error initializing camera: {e}")
-            print("\n💡 Troubleshooting tips:")
-            print("   1. Check if camera is connected: lsusb (for USB cameras)")
-            print("   2. Try different camera index: --camera 1 or --camera 2")
-            print("   3. For Pi Camera Module, you may need to enable it: sudo raspi-config")
-            sys.exit(1)
+                self.picam2.configure(config)
+                self.picam2.start()
+                
+                # Give camera time to start
+                time.sleep(1.0)
+                
+                # Test capture
+                test_frame = self.picam2.capture_array()
+                if test_frame is not None and test_frame.size > 0:
+                    self.camera_type = "picamera2"
+                    actual_width = test_frame.shape[1]
+                    actual_height = test_frame.shape[0]
+                    print(f"✅ Camera initialized (picamera2): {actual_width}x{actual_height}")
+                    return
+                else:
+                    self.picam2.stop()
+                    self.picam2 = None
+            except Exception as e:
+                print(f"   ⚠️  picamera2 failed: {e}")
+                if self.picam2:
+                    try:
+                        self.picam2.stop()
+                    except:
+                        pass
+                    self.picam2 = None
+        
+        # Fall back to OpenCV (for USB webcams or if picamera2 not available)
+        if camera_type == "auto" or camera_type == "opencv":
+            try:
+                print(f"   Trying OpenCV (USB webcam at index {self.config.CAMERA_INDEX})...")
+                self.cap = cv2.VideoCapture(self.config.CAMERA_INDEX)
+                
+                # For Raspberry Pi, try V4L2 backend
+                if not self.cap.isOpened():
+                    self.cap = cv2.VideoCapture(self.config.CAMERA_INDEX, cv2.CAP_V4L2)
+                
+                if not self.cap.isOpened():
+                    raise RuntimeError("Could not open camera")
+                
+                # Set camera properties
+                self.cap.set(cv2.CAP_PROP_FRAME_WIDTH, self.config.CAMERA_WIDTH)
+                self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, self.config.CAMERA_HEIGHT)
+                self.cap.set(cv2.CAP_PROP_FPS, self.config.CAMERA_FPS)
+                
+                # Give camera time to adjust
+                time.sleep(0.5)
+                
+                # Test capture
+                ret, test_frame = self.cap.read()
+                if ret and test_frame is not None:
+                    self.camera_type = "opencv"
+                    actual_width = int(self.cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+                    actual_height = int(self.cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+                    actual_fps = self.cap.get(cv2.CAP_PROP_FPS)
+                    print(f"✅ Camera initialized (OpenCV): {actual_width}x{actual_height} @ {actual_fps:.1f} FPS")
+                    return
+                else:
+                    self.cap.release()
+                    self.cap = None
+            except Exception as e:
+                print(f"   ⚠️  OpenCV failed: {e}")
+                if self.cap:
+                    try:
+                        self.cap.release()
+                    except:
+                        pass
+                    self.cap = None
+        
+        # If we get here, both methods failed
+        raise RuntimeError(
+            "Could not initialize camera with either picamera2 or OpenCV.\n"
+            "Troubleshooting:\n"
+            "  - For Raspberry Pi Camera Module: Install picamera2 (pip install picamera2)\n"
+            "  - For USB webcam: Check connection and try --camera 0, 1, or 2\n"
+            "  - Enable camera in raspi-config: sudo raspi-config → Interface Options → Camera\n"
+            "  - Check camera: lsusb (for USB) or rpicam-hello (for Pi Camera)"
+        )
     
     def detect_faces(self, frame):
         """
@@ -344,11 +406,25 @@ class RaspberryPiFaceDetector:
         
         try:
             while True:
-                # Read frame
-                ret, frame = self.cap.read()
-                if not ret:
-                    print("❌ Error reading frame")
-                    break
+                # Read frame based on camera type
+                if self.camera_type == "picamera2":
+                    try:
+                        frame = self.picam2.capture_array()
+                        if frame is None or frame.size == 0:
+                            print("⚠️  Warning: Empty frame from picamera2")
+                            time.sleep(0.1)
+                            continue
+                        # picamera2 returns RGB, convert to BGR for OpenCV
+                        frame = cv2.cvtColor(frame, cv2.COLOR_RGB2BGR)
+                        ret = True
+                    except Exception as e:
+                        print(f"❌ Error reading frame from picamera2: {e}")
+                        break
+                else:  # opencv
+                    ret, frame = self.cap.read()
+                    if not ret:
+                        print("❌ Error reading frame from OpenCV camera")
+                        break
                 
                 self.frame_count += 1
                 
@@ -466,8 +542,18 @@ class RaspberryPiFaceDetector:
         if self.processing_thread and self.processing_thread.is_alive():
             self.processing_thread.join(timeout=1.0)
         
+        # Clean up camera based on type
+        if self.camera_type == "picamera2" and self.picam2:
+            try:
+                self.picam2.stop()
+            except:
+                pass
+        
         if self.cap:
-            self.cap.release()
+            try:
+                self.cap.release()
+            except:
+                pass
         
         try:
             cv2.destroyAllWindows()
@@ -487,8 +573,11 @@ def main():
                        help="Path to YOLO model file")
     parser.add_argument("--conf", type=float, default=0.5, 
                        help="Confidence threshold (0.0-1.0)")
+    parser.add_argument("--camera-type", type=str, default="auto", 
+                       choices=["auto", "picamera2", "opencv"],
+                       help="Camera type: auto (try picamera2 first), picamera2, or opencv")
     parser.add_argument("--camera", type=int, default=0, 
-                       help="Camera index")
+                       help="Camera index (for OpenCV/USB webcams)")
     parser.add_argument("--width", type=int, default=640, 
                        help="Camera width")
     parser.add_argument("--height", type=int, default=480, 
@@ -506,6 +595,7 @@ def main():
     config = Config()
     config.MODEL_PATH = args.model
     config.CONFIDENCE_THRESHOLD = args.conf
+    config.CAMERA_TYPE = args.camera_type
     config.CAMERA_INDEX = args.camera
     config.CAMERA_WIDTH = args.width
     config.CAMERA_HEIGHT = args.height

@@ -74,11 +74,11 @@ pip install --upgrade pip setuptools wheel
 # Install Python dependencies
 echo "📚 Installing Python dependencies..."
 echo "   This may take several minutes on Raspberry Pi..."
-echo "   Installing OpenCV and other packages via pip..."
+echo "   Installing OpenCV, picamera2, and other packages via pip..."
 pip install --no-cache-dir -r requirements.txt
 
-# Verify OpenCV installation
-echo "🔍 Verifying OpenCV installation..."
+# Verify installations
+echo "🔍 Verifying installations..."
 if python3 -c "import cv2; print(f'✅ OpenCV {cv2.__version__} installed successfully')" 2>/dev/null; then
     echo "✅ OpenCV is ready to use"
 else
@@ -89,6 +89,13 @@ else
     else
         echo "⚠️  OpenCV verification failed, but continuing..."
     fi
+fi
+
+# Verify picamera2 installation
+if python3 -c "from picamera2 import Picamera2; print('✅ picamera2 installed successfully')" 2>/dev/null; then
+    echo "✅ picamera2 is ready to use (for Raspberry Pi Camera Module)"
+else
+    echo "⚠️  picamera2 not available (this is OK if using USB webcam)"
 fi
 
 # Check if model file exists

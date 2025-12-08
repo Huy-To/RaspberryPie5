@@ -125,6 +125,23 @@ python3 raspberry_pi_face_detection.py
 - Camera is enabled (for Pi Camera: `sudo raspi-config` → Interface Options → Camera)
 - You have a display connected (or use SSH with X11 forwarding)
 
+### Camera Support
+
+The system supports **two camera types**:
+
+1. **Raspberry Pi Camera Module** (recommended)
+   - Uses `picamera2` library (installed automatically)
+   - Better performance and native support
+   - Automatically detected in `auto` mode
+   - Test with: `rpicam-hello`
+
+2. **USB Webcam**
+   - Uses OpenCV
+   - Works with most USB cameras
+   - Specify with: `--camera-type opencv --camera 0`
+
+**Auto Mode** (default): System tries picamera2 first, then falls back to OpenCV if needed.
+
 ### Command Line Options
 
 ```bash
@@ -134,7 +151,8 @@ python3 raspberry_pi_face_detection.py [OPTIONS]
 **Available options:**
 - `--model PATH`: Path to YOLO model file (default: yolov12n-face.pt)
 - `--conf FLOAT`: Confidence threshold 0.0-1.0 (default: 0.5)
-- `--camera INT`: Camera index (default: 0)
+- `--camera-type TYPE`: Camera type: `auto` (default, tries picamera2 first), `picamera2`, or `opencv`
+- `--camera INT`: Camera index for OpenCV/USB webcams (default: 0)
 - `--width INT`: Camera width (default: 640)
 - `--height INT`: Camera height (default: 480)
 - `--resize FLOAT`: Resize factor for processing 0.1-1.0 (default: 0.75)
@@ -143,6 +161,15 @@ python3 raspberry_pi_face_detection.py [OPTIONS]
 
 **Example usage:**
 ```bash
+# Use Raspberry Pi Camera Module (automatic detection)
+python3 raspberry_pi_face_detection.py
+
+# Force use of picamera2 (Raspberry Pi Camera Module)
+python3 raspberry_pi_face_detection.py --camera-type picamera2
+
+# Force use of OpenCV (USB webcam)
+python3 raspberry_pi_face_detection.py --camera-type opencv --camera 0
+
 # Lower resolution for better performance
 python3 raspberry_pi_face_detection.py --width 480 --height 360 --resize 0.5
 
@@ -258,12 +285,20 @@ class Config:
 
 1. **Camera not detected**:
    ```bash
-   # Test camera access
+   # Test Raspberry Pi Camera Module
+   rpicam-hello
+   
+   # Test USB webcam
    python3 -c "import cv2; cap = cv2.VideoCapture(0); print('Camera OK' if cap.isOpened() else 'Camera Error'); cap.release()"
    ```
-   - **USB webcam**: Try `--camera 0`, `--camera 1`, or `--camera 2`
-   - **Pi Camera Module**: Enable in `sudo raspi-config` → Interface Options → Camera
-   - Check camera connection: `lsusb` (for USB cameras)
+   - **Raspberry Pi Camera Module**: 
+     - Enable in `sudo raspi-config` → Interface Options → Camera
+     - Test with: `rpicam-hello`
+     - Use: `--camera-type picamera2` or `--camera-type auto`
+   - **USB webcam**: 
+     - Try `--camera-type opencv --camera 0`, `--camera 1`, or `--camera 2`
+     - Check connection: `lsusb`
+   - **Auto mode**: System tries picamera2 first, then falls back to OpenCV
 
 2. **"Model file not found" error**:
    - Verify model exists: `ls -la yolov12n-face.pt`
