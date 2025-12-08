@@ -34,7 +34,8 @@ echo "🔧 Installing essential system dependencies..."
 sudo apt install -y \
     python3-pip \
     python3-venv \
-    python3-dev
+    python3-dev \
+    libcap-dev
 
 # Try to install optional packages (continue if they fail)
 echo "🔧 Installing optional system dependencies (if available)..."
@@ -55,6 +56,12 @@ for pkg in libopencv-dev libatlas-base-dev libhdf5-dev libhdf5-serial-dev; do
         echo "⚠️  Package not available: $pkg (skipping - not critical)"
     fi
 done
+
+# Note: libcap-dev is required for python-prctl (picamera2 dependency)
+# It's already installed above, but we verify it here
+if dpkg -l | grep -q "^ii.*libcap-dev"; then
+    echo "✅ libcap-dev installed (required for picamera2)"
+fi
 
 set -e  # Re-enable exit on error
 

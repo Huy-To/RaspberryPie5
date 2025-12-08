@@ -75,10 +75,12 @@ If you prefer manual installation or the script fails:
 1. **Install essential system dependencies**:
    ```bash
    sudo apt update
-   sudo apt install -y python3-pip python3-venv python3-dev
+   sudo apt install -y python3-pip python3-venv python3-dev libcap-dev
    ```
    
-   **Note:** OpenCV will be installed via pip (included in requirements.txt), so you don't need `python3-opencv` from apt.
+   **Note:** 
+   - OpenCV will be installed via pip (included in requirements.txt)
+   - `libcap-dev` is required for picamera2 (Raspberry Pi Camera Module support)
 
 2. **Create virtual environment**:
    ```bash
@@ -323,6 +325,13 @@ class Config:
    - Check if OpenCV is installed: `python3 -c "import cv2; print(cv2.__version__)"`
    - If OpenCV fails, try: `pip install --upgrade opencv-python`
    - **Note:** We use pip-installed OpenCV, not system OpenCV, so missing apt packages are OK
+
+6. **python-prctl build error** ("You need to install libcap development headers"):
+   ```bash
+   sudo apt install -y libcap-dev
+   pip install --upgrade picamera2
+   ```
+   This error occurs when installing picamera2. Installing `libcap-dev` fixes it.
 
 6. **Display/GUI errors**:
    - If running headless (no display), the system will still process frames
