@@ -1,38 +1,40 @@
 #!/usr/bin/env python3
 """
-Raspberry Pi 5 Face Detection System
-====================================
+Raspberry Pi 5 Face Detection System (Picamera2 Only)
+=====================================================
 
 A real-time face detection system optimized for Raspberry Pi 5 using YOLOv12n-face.pt
 Features:
-- Real-time camera feed
+- Real-time camera feed using picamera2 (Raspberry Pi Camera Module only)
 - Optimized for Raspberry Pi 5 performance
 - Configurable detection parameters
 - FPS monitoring and performance stats
-- Keyboard controls for runtime configuration
+- Console output with detection results
 
 Author: AI Assistant
 Date: 2024
 """
 
-import cv2
 import numpy as np
 import time
 import threading
 import queue
 from ultralytics import YOLO
 import argparse
-import os
 import sys
 from pathlib import Path
+from PIL import Image, ImageDraw, ImageFont
 
-# Try to import picamera2 for Raspberry Pi Camera Module
+# Import picamera2 for Raspberry Pi Camera Module
 try:
     from picamera2 import Picamera2
     PICAMERA2_AVAILABLE = True
 except ImportError:
     PICAMERA2_AVAILABLE = False
     Picamera2 = None
+    print("❌ picamera2 is required but not installed.")
+    print("   Install with: pip install picamera2")
+    sys.exit(1)
 
 # ============================================================================
 # CONFIGURATION
@@ -47,8 +49,6 @@ class Config:
     IOU_THRESHOLD = 0.45
     
     # Camera settings
-    CAMERA_TYPE = "auto"  # "auto", "picamera2", or "opencv"
-    CAMERA_INDEX = 0
     CAMERA_WIDTH = 640
     CAMERA_HEIGHT = 480
     CAMERA_FPS = 30
@@ -63,13 +63,13 @@ class Config:
     SHOW_FPS = True
     SHOW_DETECTION_INFO = True
     SHOW_PERFORMANCE_STATS = True
-    WINDOW_NAME = "Raspberry Pi 5 - Face Detection"
+    PRINT_TO_CONSOLE = True  # Print detection info to console
     
-    # Colors (BGR format)
+    # Colors (RGB format for PIL)
     BOX_COLOR = (0, 255, 0)  # Green
     TEXT_COLOR = (0, 255, 0)  # Green
     FPS_COLOR = (255, 255, 0)  # Yellow
-    WARNING_COLOR = (0, 0, 255)  # Red
+    WARNING_COLOR = (255, 0, 0)  # Red
 
 # ============================================================================
 # FACE DETECTION SYSTEM
@@ -77,7 +77,7 @@ class Config:
 
 class RaspberryPiFaceDetector:
     """
-    Face detection system optimized for Raspberry Pi 5
+    Face detection system optimized for Raspberry Pi 5 using picamera2 only
     """
     
     def __init__(self, config=Config()):
@@ -89,9 +89,7 @@ class RaspberryPiFaceDetector:
         """
         self.config = config
         self.model = None
-        self.cap = None
         self.picam2 = None
-        self.camera_type = None  # "picamera2" or "opencv"
         
         # Performance tracking
         self.fps_counter = 0
@@ -110,7 +108,7 @@ class RaspberryPiFaceDetector:
         self.last_detections = []
         self.last_detection_time = 0
         
-        print("🚀 Initializing Raspberry Pi 5 Face Detection System...")
+        print("🚀 Initializing Raspberry Pi 5 Face Detection System (Picamera2 Only)...")
         self.initialize_model()
         self.initialize_camera()
         
@@ -143,106 +141,52 @@ class RaspberryPiFaceDetector:
             sys.exit(1)
     
     def initialize_camera(self):
-        """Initialize camera capture - tries picamera2 first, then OpenCV"""
-        print("📹 Initializing camera...")
+        """Initialize picamera2 camera capture"""
+        if not PICAMERA2_AVAILABLE:
+            raise RuntimeError(
+                "picamera2 is not available. Install with: pip install picamera2\n"
+                "Note: This system only supports Raspberry Pi Camera Module via picamera2."
+            )
         
-        # Determine camera type
-        camera_type = self.config.CAMERA_TYPE.lower()
-        
-        # Try picamera2 first (for Raspberry Pi Camera Module)
-        if (camera_type == "auto" or camera_type == "picamera2") and PICAMERA2_AVAILABLE:
-            try:
-                print("   Trying picamera2 (Raspberry Pi Camera Module)...")
-                self.picam2 = Picamera2()
-                
-                # Configure camera
-                config = self.picam2.create_preview_configuration(
-                    main={"size": (self.config.CAMERA_WIDTH, self.config.CAMERA_HEIGHT), "format": "RGB888"}
-                )
-                self.picam2.configure(config)
-                self.picam2.start()
-                
-                # Give camera time to start
-                time.sleep(1.0)
-                
-                # Test capture
-                test_frame = self.picam2.capture_array()
-                if test_frame is not None and test_frame.size > 0:
-                    self.camera_type = "picamera2"
-                    actual_width = test_frame.shape[1]
-                    actual_height = test_frame.shape[0]
-                    print(f"✅ Camera initialized (picamera2): {actual_width}x{actual_height}")
-                    return
-                else:
-                    self.picam2.stop()
-                    self.picam2 = None
-            except Exception as e:
-                print(f"   ⚠️  picamera2 failed: {e}")
-                if self.picam2:
-                    try:
-                        self.picam2.stop()
-                    except:
-                        pass
-                    self.picam2 = None
-        
-        # Fall back to OpenCV (for USB webcams or if picamera2 not available)
-        if camera_type == "auto" or camera_type == "opencv":
-            try:
-                print(f"   Trying OpenCV (USB webcam at index {self.config.CAMERA_INDEX})...")
-                self.cap = cv2.VideoCapture(self.config.CAMERA_INDEX)
-                
-                # For Raspberry Pi, try V4L2 backend
-                if not self.cap.isOpened():
-                    self.cap = cv2.VideoCapture(self.config.CAMERA_INDEX, cv2.CAP_V4L2)
-                
-                if not self.cap.isOpened():
-                    raise RuntimeError("Could not open camera")
-                
-                # Set camera properties
-                self.cap.set(cv2.CAP_PROP_FRAME_WIDTH, self.config.CAMERA_WIDTH)
-                self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, self.config.CAMERA_HEIGHT)
-                self.cap.set(cv2.CAP_PROP_FPS, self.config.CAMERA_FPS)
-                
-                # Give camera time to adjust
-                time.sleep(0.5)
-                
-                # Test capture
-                ret, test_frame = self.cap.read()
-                if ret and test_frame is not None:
-                    self.camera_type = "opencv"
-                    actual_width = int(self.cap.get(cv2.CAP_PROP_FRAME_WIDTH))
-                    actual_height = int(self.cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
-                    actual_fps = self.cap.get(cv2.CAP_PROP_FPS)
-                    print(f"✅ Camera initialized (OpenCV): {actual_width}x{actual_height} @ {actual_fps:.1f} FPS")
-                    return
-                else:
-                    self.cap.release()
-                    self.cap = None
-            except Exception as e:
-                print(f"   ⚠️  OpenCV failed: {e}")
-                if self.cap:
-                    try:
-                        self.cap.release()
-                    except:
-                        pass
-                    self.cap = None
-        
-        # If we get here, both methods failed
-        raise RuntimeError(
-            "Could not initialize camera with either picamera2 or OpenCV.\n"
-            "Troubleshooting:\n"
-            "  - For Raspberry Pi Camera Module: Install picamera2 (pip install picamera2)\n"
-            "  - For USB webcam: Check connection and try --camera 0, 1, or 2\n"
-            "  - Enable camera in raspi-config: sudo raspi-config → Interface Options → Camera\n"
-            "  - Check camera: lsusb (for USB) or rpicam-hello (for Pi Camera)"
-        )
+        try:
+            print("📹 Initializing picamera2 (Raspberry Pi Camera Module)...")
+            
+            self.picam2 = Picamera2()
+            
+            # Configure camera
+            config = self.picam2.create_preview_configuration(
+                main={"size": (self.config.CAMERA_WIDTH, self.config.CAMERA_HEIGHT), "format": "RGB888"}
+            )
+            self.picam2.configure(config)
+            self.picam2.start()
+            
+            # Give camera time to start
+            time.sleep(1.0)
+            
+            # Test capture
+            test_frame = self.picam2.capture_array()
+            if test_frame is not None and test_frame.size > 0:
+                actual_width = test_frame.shape[1]
+                actual_height = test_frame.shape[0]
+                print(f"✅ Camera initialized: {actual_width}x{actual_height}")
+            else:
+                raise RuntimeError("Camera test capture failed")
+            
+        except Exception as e:
+            print(f"❌ Error initializing camera: {e}")
+            print("\n💡 Troubleshooting tips:")
+            print("   1. Make sure Raspberry Pi Camera Module is connected")
+            print("   2. Enable camera: sudo raspi-config → Interface Options → Camera")
+            print("   3. Test camera: rpicam-hello")
+            print("   4. Check camera connection and cable")
+            sys.exit(1)
     
     def detect_faces(self, frame):
         """
         Detect faces in a frame using YOLO
         
         Args:
-            frame: Input image frame (BGR format)
+            frame: Input image frame (RGB format from picamera2)
             
         Returns:
             tuple: (boxes, scores) - bounding boxes and confidence scores
@@ -256,7 +200,10 @@ class RaspberryPiFaceDetector:
         if self.config.RESIZE_FACTOR != 1.0:
             new_w = int(W * self.config.RESIZE_FACTOR)
             new_h = int(H * self.config.RESIZE_FACTOR)
-            frame_resized = cv2.resize(frame, (new_w, new_h))
+            # Use PIL for resizing (more efficient than numpy)
+            pil_image = Image.fromarray(frame)
+            pil_image = pil_image.resize((new_w, new_h), Image.Resampling.LANCZOS)
+            frame_resized = np.array(pil_image)
             scale_factor = 1.0 / self.config.RESIZE_FACTOR
         else:
             frame_resized = frame
@@ -295,43 +242,77 @@ class RaspberryPiFaceDetector:
     
     def draw_detections(self, frame, boxes, scores):
         """
-        Draw bounding boxes and labels on the frame
+        Draw bounding boxes and labels on the frame using PIL
         
         Args:
-            frame: Input frame to draw on
+            frame: Input frame (numpy array, RGB format)
             boxes: List of bounding boxes
             scores: List of confidence scores
         """
+        if len(boxes) == 0:
+            return frame
+        
+        # Convert to PIL Image for drawing
+        pil_image = Image.fromarray(frame)
+        draw = ImageDraw.Draw(pil_image)
+        
+        # Try to load a font, fall back to default if not available
+        try:
+            font = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", 16)
+        except:
+            try:
+                font = ImageFont.truetype("/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf", 16)
+            except:
+                font = ImageFont.load_default()
+        
         for i, (box, score) in enumerate(zip(boxes, scores)):
             x1, y1, x2, y2 = map(int, box)
             
             # Draw bounding box
-            cv2.rectangle(frame, (x1, y1), (x2, y2), self.config.BOX_COLOR, 2)
+            draw.rectangle([x1, y1, x2, y2], outline=self.config.BOX_COLOR, width=2)
             
             # Draw confidence score
             label = f"Face: {score:.2f}"
-            label_size = cv2.getTextSize(label, cv2.FONT_HERSHEY_SIMPLEX, 0.6, 2)[0]
+            # Get text size for background
+            bbox = draw.textbbox((0, 0), label, font=font)
+            text_width = bbox[2] - bbox[0]
+            text_height = bbox[3] - bbox[1]
             
-            # Background rectangle for text
-            cv2.rectangle(frame, (x1, y1 - label_size[1] - 10), 
-                         (x1 + label_size[0], y1), self.config.BOX_COLOR, -1)
+            # Draw background rectangle for text
+            draw.rectangle([x1, y1 - text_height - 4, x1 + text_width + 4, y1], 
+                          fill=self.config.BOX_COLOR)
             
-            # Text
-            cv2.putText(frame, label, (x1, y1 - 5), 
-                       cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 0, 0), 2)
+            # Draw text
+            draw.text((x1 + 2, y1 - text_height - 2), label, fill=(0, 0, 0), font=font)
+        
+        # Convert back to numpy array
+        return np.array(pil_image)
     
     def add_performance_info(self, frame):
         """
-        Add performance information overlay to the frame
+        Add performance information overlay to the frame using PIL
         
         Args:
-            frame: Input frame to add overlay to
+            frame: Input frame (numpy array, RGB format)
         """
         if not self.config.SHOW_FPS and not self.config.SHOW_DETECTION_INFO:
-            return
+            return frame
+        
+        # Convert to PIL Image
+        pil_image = Image.fromarray(frame)
+        draw = ImageDraw.Draw(pil_image)
+        
+        # Try to load a font
+        try:
+            font = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", 14)
+        except:
+            try:
+                font = ImageFont.truetype("/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf", 14)
+            except:
+                font = ImageFont.load_default()
         
         info_lines = []
-        y_offset = 30
+        y_offset = 10
         
         # FPS information
         if self.config.SHOW_FPS:
@@ -351,8 +332,12 @@ class RaspberryPiFaceDetector:
         
         # Draw information
         for i, line in enumerate(info_lines):
-            cv2.putText(frame, line, (10, y_offset + i * 25), 
-                       cv2.FONT_HERSHEY_SIMPLEX, 0.7, self.config.TEXT_COLOR, 2)
+            # Draw text with outline for visibility
+            x, y = 10, y_offset + i * 20
+            draw.text((x, y), line, fill=self.config.TEXT_COLOR, font=font)
+        
+        # Convert back to numpy array
+        return np.array(pil_image)
     
     def calculate_fps(self):
         """Calculate current FPS"""
@@ -386,14 +371,10 @@ class RaspberryPiFaceDetector:
     def run(self):
         """Main detection loop"""
         print("🎬 Starting face detection...")
-        print("📋 Controls:")
-        print("   - 'q' or ESC: Quit")
-        print("   - 'r': Reset FPS counter")
-        print("   - 'f': Toggle FPS display")
-        print("   - 'd': Toggle detection info")
-        print("   - 's': Toggle performance stats")
-        print("   - 'c': Toggle confidence threshold")
-        print("   - SPACE: Pause/Resume")
+        print("📋 System Information:")
+        print("   - Camera: Raspberry Pi Camera Module (picamera2)")
+        print("   - Display: Console output only")
+        print("   - Press Ctrl+C to quit")
         print()
         
         self.is_running = True
@@ -406,25 +387,16 @@ class RaspberryPiFaceDetector:
         
         try:
             while True:
-                # Read frame based on camera type
-                if self.camera_type == "picamera2":
-                    try:
-                        frame = self.picam2.capture_array()
-                        if frame is None or frame.size == 0:
-                            print("⚠️  Warning: Empty frame from picamera2")
-                            time.sleep(0.1)
-                            continue
-                        # picamera2 returns RGB, convert to BGR for OpenCV
-                        frame = cv2.cvtColor(frame, cv2.COLOR_RGB2BGR)
-                        ret = True
-                    except Exception as e:
-                        print(f"❌ Error reading frame from picamera2: {e}")
-                        break
-                else:  # opencv
-                    ret, frame = self.cap.read()
-                    if not ret:
-                        print("❌ Error reading frame from OpenCV camera")
-                        break
+                # Read frame from picamera2
+                try:
+                    frame = self.picam2.capture_array()
+                    if frame is None or frame.size == 0:
+                        print("⚠️  Warning: Empty frame from picamera2")
+                        time.sleep(0.1)
+                        continue
+                except Exception as e:
+                    print(f"❌ Error reading frame from picamera2: {e}")
+                    break
                 
                 self.frame_count += 1
                 
@@ -453,11 +425,12 @@ class RaspberryPiFaceDetector:
                             if len(self.processing_times) > 30:
                                 self.processing_times.pop(0)
                             
-                            self.draw_detections(frame, boxes, scores)
+                            # Draw detections
+                            frame = self.draw_detections(frame, boxes, scores)
                         except queue.Empty:
                             # Use cached results if no new results available
                             if time.time() - self.last_detection_time < 0.5:  # Use cache for 0.5 seconds
-                                self.draw_detections(frame, self.last_detections, [0.9] * len(self.last_detections))
+                                frame = self.draw_detections(frame, self.last_detections, [0.9] * len(self.last_detections))
                     else:
                         # Synchronous processing
                         if should_process:
@@ -472,61 +445,36 @@ class RaspberryPiFaceDetector:
                             if len(self.processing_times) > 30:
                                 self.processing_times.pop(0)
                             
-                            self.draw_detections(frame, boxes, scores)
+                            # Draw detections
+                            frame = self.draw_detections(frame, boxes, scores)
                 
                 # Calculate FPS
                 self.calculate_fps()
                 
                 # Add performance information
-                self.add_performance_info(frame)
+                frame = self.add_performance_info(frame)
+                
+                # Print to console if enabled
+                if self.config.PRINT_TO_CONSOLE and should_process:
+                    if len(self.last_detections) > 0:
+                        print(f"Frame {self.frame_count}: {len(self.last_detections)} face(s) detected | "
+                              f"FPS: {self.current_fps:.1f} | "
+                              f"Confidence: {[f'{s:.2f}' for s in self.last_detections]}")
                 
                 # Add pause indicator
                 if paused:
-                    cv2.putText(frame, "PAUSED - Press SPACE to resume", (10, frame.shape[0] - 20), 
-                               cv2.FONT_HERSHEY_SIMPLEX, 0.7, self.config.WARNING_COLOR, 2)
+                    pil_image = Image.fromarray(frame)
+                    draw = ImageDraw.Draw(pil_image)
+                    try:
+                        font = ImageFont.load_default()
+                    except:
+                        font = None
+                    draw.text((10, frame.shape[0] - 20), "PAUSED - Press Ctrl+C to quit", 
+                             fill=self.config.WARNING_COLOR, font=font)
+                    frame = np.array(pil_image)
                 
-                # Display frame (check if display is available)
-                try:
-                    cv2.imshow(self.config.WINDOW_NAME, frame)
-                except cv2.error as e:
-                    # Handle headless mode or display issues
-                    if "Can't initialize GTK backend" in str(e) or "display" in str(e).lower():
-                        print("⚠️  Display not available. Running in headless mode.")
-                        print("   Press Ctrl+C to stop.")
-                        # Still process frames but don't display
-                        time.sleep(0.1)
-                        continue
-                    else:
-                        raise
-                
-                # Handle keyboard input
-                key = cv2.waitKey(1) & 0xFF
-                if key == ord('q') or key == 27:  # 'q' or ESC
-                    break
-                elif key == ord('r'):  # Reset FPS
-                    self.fps_counter = 0
-                    self.fps_start_time = time.time()
-                    print("🔄 FPS counter reset")
-                elif key == ord('f'):  # Toggle FPS display
-                    self.config.SHOW_FPS = not self.config.SHOW_FPS
-                    print(f"📊 FPS display: {'ON' if self.config.SHOW_FPS else 'OFF'}")
-                elif key == ord('d'):  # Toggle detection info
-                    self.config.SHOW_DETECTION_INFO = not self.config.SHOW_DETECTION_INFO
-                    print(f"👁️ Detection info: {'ON' if self.config.SHOW_DETECTION_INFO else 'OFF'}")
-                elif key == ord('s'):  # Toggle performance stats
-                    self.config.SHOW_PERFORMANCE_STATS = not self.config.SHOW_PERFORMANCE_STATS
-                    print(f"📈 Performance stats: {'ON' if self.config.SHOW_PERFORMANCE_STATS else 'OFF'}")
-                elif key == ord('c'):  # Toggle confidence threshold
-                    if self.config.CONFIDENCE_THRESHOLD == 0.5:
-                        self.config.CONFIDENCE_THRESHOLD = 0.3
-                    elif self.config.CONFIDENCE_THRESHOLD == 0.3:
-                        self.config.CONFIDENCE_THRESHOLD = 0.7
-                    else:
-                        self.config.CONFIDENCE_THRESHOLD = 0.5
-                    print(f"🎯 Confidence threshold: {self.config.CONFIDENCE_THRESHOLD}")
-                elif key == ord(' '):  # Space - Pause/Resume
-                    paused = not paused
-                    print(f"⏸️ {'Paused' if paused else 'Resumed'}")
+                # Small delay to prevent overwhelming the system
+                time.sleep(0.01)
         
         except KeyboardInterrupt:
             print("\n🛑 Interrupted by user")
@@ -542,23 +490,12 @@ class RaspberryPiFaceDetector:
         if self.processing_thread and self.processing_thread.is_alive():
             self.processing_thread.join(timeout=1.0)
         
-        # Clean up camera based on type
-        if self.camera_type == "picamera2" and self.picam2:
+        # Clean up camera
+        if self.picam2:
             try:
                 self.picam2.stop()
             except:
                 pass
-        
-        if self.cap:
-            try:
-                self.cap.release()
-            except:
-                pass
-        
-        try:
-            cv2.destroyAllWindows()
-        except:
-            pass  # Ignore errors if no windows were created
         
         print("✅ Cleanup complete")
 
@@ -568,16 +505,11 @@ class RaspberryPiFaceDetector:
 
 def main():
     """Main function"""
-    parser = argparse.ArgumentParser(description="Raspberry Pi 5 Face Detection System")
+    parser = argparse.ArgumentParser(description="Raspberry Pi 5 Face Detection System (Picamera2 Only)")
     parser.add_argument("--model", type=str, default="yolov12n-face.pt", 
                        help="Path to YOLO model file")
     parser.add_argument("--conf", type=float, default=0.5, 
                        help="Confidence threshold (0.0-1.0)")
-    parser.add_argument("--camera-type", type=str, default="auto", 
-                       choices=["auto", "picamera2", "opencv"],
-                       help="Camera type: auto (try picamera2 first), picamera2, or opencv")
-    parser.add_argument("--camera", type=int, default=0, 
-                       help="Camera index (for OpenCV/USB webcams)")
     parser.add_argument("--width", type=int, default=640, 
                        help="Camera width")
     parser.add_argument("--height", type=int, default=480, 
@@ -588,6 +520,8 @@ def main():
                        help="Number of frames to skip between processing")
     parser.add_argument("--no-parallel", action="store_true", 
                        help="Disable parallel processing")
+    parser.add_argument("--no-console", action="store_true",
+                       help="Disable console output")
     
     args = parser.parse_args()
     
@@ -595,13 +529,12 @@ def main():
     config = Config()
     config.MODEL_PATH = args.model
     config.CONFIDENCE_THRESHOLD = args.conf
-    config.CAMERA_TYPE = args.camera_type
-    config.CAMERA_INDEX = args.camera
     config.CAMERA_WIDTH = args.width
     config.CAMERA_HEIGHT = args.height
     config.RESIZE_FACTOR = args.resize
     config.SKIP_FRAMES = args.skip_frames
     config.ENABLE_PARALLEL_PROCESSING = not args.no_parallel
+    config.PRINT_TO_CONSOLE = not args.no_console
     
     # Validate arguments
     if not (0.0 <= args.conf <= 1.0):

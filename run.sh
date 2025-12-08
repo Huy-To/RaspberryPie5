@@ -16,6 +16,22 @@ fi
 echo "🏠 Activating virtual environment..."
 source face_detection_env/bin/activate
 
+# Verify picamera2 is installed (REQUIRED)
+echo "🔍 Checking picamera2 installation..."
+if ! python3 -c "from picamera2 import Picamera2" 2>/dev/null; then
+    echo "❌ picamera2 not found in virtual environment"
+    echo "📦 Installing picamera2..."
+    pip install --no-cache-dir picamera2
+    if python3 -c "from picamera2 import Picamera2" 2>/dev/null; then
+        echo "✅ picamera2 installed successfully"
+    else
+        echo "❌ Failed to install picamera2. Please run setup.sh again."
+        exit 1
+    fi
+else
+    echo "✅ picamera2 is installed"
+fi
+
 # Check if model file exists
 if [ ! -f "yolov12n-face.pt" ]; then
     echo "❌ YOLO model file not found: yolov12n-face.pt"

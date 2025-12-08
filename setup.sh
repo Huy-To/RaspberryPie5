@@ -40,13 +40,6 @@ sudo apt install -y \
 echo "🔧 Installing optional system dependencies (if available)..."
 set +e  # Don't exit on error for optional packages
 
-# Try to install OpenCV system package (optional - we'll use pip version)
-if sudo apt install -y python3-opencv 2>/dev/null; then
-    echo "✅ System OpenCV installed"
-else
-    echo "⚠️  System OpenCV not available, will use pip-installed version"
-fi
-
 # Try to install libcap-dev (required for picamera2/python-prctl)
 # Try multiple package names as they vary by OS version
 LIBCAP_INSTALLED=false
@@ -91,51 +84,49 @@ pip install --upgrade pip setuptools wheel
 # Install Python dependencies
 echo "📚 Installing Python dependencies..."
 echo "   This may take several minutes on Raspberry Pi..."
+echo "   Installing ultralytics, picamera2, Pillow, and numpy..."
 
-# Install core dependencies first (these should always work)
-echo "   Installing core packages (ultralytics, opencv-python, numpy)..."
-pip install --no-cache-dir ultralytics opencv-python numpy
-
-# Try to install picamera2 separately (it may fail if libcap-dev is missing)
-echo "   Attempting to install picamera2 (for Raspberry Pi Camera Module)..."
-set +e  # Don't exit on error for picamera2
-PICAMERA2_INSTALLED=false
-if pip install --no-cache-dir picamera2 2>/dev/null; then
-    echo "✅ picamera2 installed successfully"
-    PICAMERA2_INSTALLED=true
-else
-    echo "⚠️  picamera2 installation failed (likely due to missing libcap-dev)"
-    echo "   This is OK if you're using USB webcam instead of Pi Camera Module"
-    echo "   You can use: --camera-type opencv for USB webcams"
-fi
-set -e  # Re-enable exit on error
+# Install all dependencies from requirements.txt
+pip install --no-cache-dir -r requirements.txt
 
 # Verify installations
 echo "🔍 Verifying installations..."
-if python3 -c "import cv2; print(f'✅ OpenCV {cv2.__version__} installed successfully')" 2>/dev/null; then
-    echo "✅ OpenCV is ready to use"
+
+# Verify picamera2 (REQUIRED)
+if python3 -c "from picamera2 import Picamera2; print('✅ picamera2 installed successfully')" 2>/dev/null; then
+    echo "✅ picamera2 is ready to use (REQUIRED for Raspberry Pi Camera Module)"
 else
-    echo "❌ OpenCV installation failed. Trying to fix..."
-    pip install --upgrade --no-cache-dir opencv-python
-    if python3 -c "import cv2" 2>/dev/null; then
-        echo "✅ OpenCV fixed"
+    echo "❌ picamera2 installation failed!"
+    if [ "$LIBCAP_INSTALLED" = false ]; then
+        echo "   Reason: libcap-dev package not found in repositories"
+        echo "   Solution: Install libcap-dev or libcap2-dev"
     else
-        echo "⚠️  OpenCV verification failed, but continuing..."
+        echo "   Please check the error messages above"
+    fi
+    echo "   Try: pip install --upgrade picamera2"
+    exit 1
+fi
+
+# Verify Pillow
+if python3 -c "from PIL import Image; print(f'✅ Pillow {Image.__version__} installed')" 2>/dev/null; then
+    echo "✅ Pillow is ready to use"
+else
+    echo "❌ Pillow installation failed. Trying to fix..."
+    pip install --upgrade --no-cache-dir Pillow
+    if python3 -c "from PIL import Image" 2>/dev/null; then
+        echo "✅ Pillow fixed"
+    else
+        echo "❌ Pillow installation failed!"
+        exit 1
     fi
 fi
 
-# Verify picamera2 installation
-if python3 -c "from picamera2 import Picamera2; print('✅ picamera2 installed successfully')" 2>/dev/null; then
-    echo "✅ picamera2 is ready to use (for Raspberry Pi Camera Module)"
+# Verify ultralytics
+if python3 -c "from ultralytics import YOLO; print('✅ ultralytics installed')" 2>/dev/null; then
+    echo "✅ ultralytics is ready to use"
 else
-    echo "⚠️  picamera2 not available"
-    if [ "$LIBCAP_INSTALLED" = false ]; then
-        echo "   Reason: libcap-dev package not found in repositories"
-        echo "   Solution: Use USB webcam with --camera-type opencv"
-    else
-        echo "   Installation may have failed for another reason"
-        echo "   You can still use USB webcam with --camera-type opencv"
-    fi
+    echo "❌ ultralytics installation failed!"
+    exit 1
 fi
 
 # Check if model file exists
@@ -151,11 +142,12 @@ fi
 # Test camera access (non-blocking - just a warning if it fails)
 echo "📹 Testing camera access..."
 set +e  # Temporarily disable exit on error for camera test
-if python3 -c "import cv2; cap = cv2.VideoCapture(0); result = cap.isOpened(); cap.release(); exit(0 if result else 1)" 2>/dev/null; then
-    echo "✅ Camera accessible"
+if python3 -c "from picamera2 import Picamera2; cam = Picamera2(); cam.start(); cam.stop(); print('✅ Camera accessible')" 2>/dev/null; then
+    echo "✅ Raspberry Pi Camera Module accessible"
 else
     echo "⚠️  Camera not accessible right now. This is OK if camera is not connected."
     echo "   You can test it later when running the application."
+    echo "   Test with: rpicam-hello"
 fi
 set -e  # Re-enable exit on error
 

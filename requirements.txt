@@ -1,25 +1,19 @@
-# Raspberry Pi 5 Face Detection System Requirements
-# =================================================
-# 
-# Note: On Raspberry Pi, it's recommended to use system OpenCV (python3-opencv)
-# which is installed via apt in setup.sh. This requirements.txt is for pip
-# installation as a fallback or if you prefer pip-installed OpenCV.
+# Raspberry Pi 5 Face Detection System Requirements (Picamera2 Only)
+# ===================================================================
 
 # Core dependencies for face detection
 ultralytics>=8.0.0
-opencv-python>=4.8.0
 numpy>=1.24.0
 
-# Raspberry Pi Camera Module support
+# Raspberry Pi Camera Module support (REQUIRED)
 picamera2>=0.3.12
+
+# Image processing and drawing (replaces OpenCV)
+Pillow>=10.0.0
 
 # Note: pathlib and argparse are built-in Python modules (Python 3.4+)
 # No need to install them separately
 
-# Optional: For better performance on Raspberry Pi 5
-# Uncomment if you have OpenCV with optimizations
-# opencv-contrib-python>=4.8.0
-
-# Note: These are the minimal requirements for the face detection system
-# The system is optimized for Raspberry Pi 5 with limited resources
+# Note: This system uses picamera2 ONLY - no OpenCV required
+# The system is optimized for Raspberry Pi 5 with Raspberry Pi Camera Module
 

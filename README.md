@@ -1,6 +1,7 @@
-# Raspberry Pi 5 Face Detection System
+# Raspberry Pi 5 Face Detection System (Picamera2 Only)
 
 A real-time face detection system optimized for Raspberry Pi 5 using YOLOv12n-face.pt model.
+**This version uses picamera2 ONLY - no OpenCV required. Designed specifically for Raspberry Pi Camera Module.**
 
 ## ⚡ Quick Start (3 Steps)
 
@@ -38,14 +39,15 @@ A real-time face detection system optimized for Raspberry Pi 5 using YOLOv12n-fa
 
 ### Hardware
 - Raspberry Pi 5 (recommended) or Pi 4
-- Camera module or USB webcam
+- **Raspberry Pi Camera Module** (required - USB webcams not supported)
 - At least 4GB RAM (8GB recommended for best performance)
 - MicroSD card with at least 16GB storage
 
 ### Software
 - Raspberry Pi OS (64-bit recommended)
 - Python 3.8 or higher
-- Camera access permissions
+- Camera enabled in raspi-config
+- **picamera2 library** (installed automatically)
 
 ## 🛠️ Installation
 
@@ -100,7 +102,7 @@ If you prefer manual installation or the script fails:
    pip install -r requirements.txt
    ```
    
-   This will install OpenCV via pip, which is more reliable on Raspberry Pi.
+   This will install picamera2, ultralytics, Pillow, and numpy.
 
 4. **Verify YOLO model**:
    - The `yolov12n-face.pt` model should be in the same directory
@@ -135,20 +137,14 @@ python3 raspberry_pi_face_detection.py
 
 ### Camera Support
 
-The system supports **two camera types**:
+**This system ONLY supports Raspberry Pi Camera Module via picamera2.**
 
-1. **Raspberry Pi Camera Module** (recommended)
-   - Uses `picamera2` library (installed automatically)
-   - Better performance and native support
-   - Automatically detected in `auto` mode
-   - Test with: `rpicam-hello`
+- Uses `picamera2` library (installed automatically)
+- Native Raspberry Pi Camera Module support
+- No OpenCV required
+- Test camera with: `rpicam-hello`
 
-2. **USB Webcam**
-   - Uses OpenCV
-   - Works with most USB cameras
-   - Specify with: `--camera-type opencv --camera 0`
-
-**Auto Mode** (default): System tries picamera2 first, then falls back to OpenCV if needed.
+**Note:** USB webcams are not supported in this version. This system is designed specifically for Raspberry Pi Camera Module.
 
 ### Command Line Options
 
@@ -159,24 +155,17 @@ python3 raspberry_pi_face_detection.py [OPTIONS]
 **Available options:**
 - `--model PATH`: Path to YOLO model file (default: yolov12n-face.pt)
 - `--conf FLOAT`: Confidence threshold 0.0-1.0 (default: 0.5)
-- `--camera-type TYPE`: Camera type: `auto` (default, tries picamera2 first), `picamera2`, or `opencv`
-- `--camera INT`: Camera index for OpenCV/USB webcams (default: 0)
 - `--width INT`: Camera width (default: 640)
 - `--height INT`: Camera height (default: 480)
 - `--resize FLOAT`: Resize factor for processing 0.1-1.0 (default: 0.75)
 - `--skip-frames INT`: Frames to skip between processing (default: 2)
 - `--no-parallel`: Disable parallel processing
+- `--no-console`: Disable console output
 
 **Example usage:**
 ```bash
-# Use Raspberry Pi Camera Module (automatic detection)
+# Basic usage (Raspberry Pi Camera Module)
 python3 raspberry_pi_face_detection.py
-
-# Force use of picamera2 (Raspberry Pi Camera Module)
-python3 raspberry_pi_face_detection.py --camera-type picamera2
-
-# Force use of OpenCV (USB webcam)
-python3 raspberry_pi_face_detection.py --camera-type opencv --camera 0
 
 # Lower resolution for better performance
 python3 raspberry_pi_face_detection.py --width 480 --height 360 --resize 0.5
@@ -186,21 +175,18 @@ python3 raspberry_pi_face_detection.py --conf 0.7
 
 # Disable parallel processing if having issues
 python3 raspberry_pi_face_detection.py --no-parallel
+
+# Disable console output (for headless operation)
+python3 raspberry_pi_face_detection.py --no-console
 ```
 
 ## 🎮 Controls
 
-During runtime, you can use these keyboard controls:
+**Note:** This version outputs to console only (no GUI window).
 
-| Key | Action |
-|-----|--------|
-| `q` or `ESC` | Quit the application |
-| `r` | Reset FPS counter |
-| `f` | Toggle FPS display |
-| `d` | Toggle detection information |
-| `s` | Toggle performance statistics |
-| `c` | Cycle confidence threshold (0.3 → 0.5 → 0.7) |
-| `SPACE` | Pause/Resume detection |
+- **Ctrl+C**: Quit the application
+- Detection results are printed to console
+- Performance stats are displayed in console output
 
 ## ⚡ Performance Optimization
 
@@ -295,18 +281,13 @@ class Config:
    ```bash
    # Test Raspberry Pi Camera Module
    rpicam-hello
-   
-   # Test USB webcam
-   python3 -c "import cv2; cap = cv2.VideoCapture(0); print('Camera OK' if cap.isOpened() else 'Camera Error'); cap.release()"
    ```
    - **Raspberry Pi Camera Module**: 
      - Enable in `sudo raspi-config` → Interface Options → Camera
      - Test with: `rpicam-hello`
-     - Use: `--camera-type picamera2` or `--camera-type auto`
-   - **USB webcam**: 
-     - Try `--camera-type opencv --camera 0`, `--camera 1`, or `--camera 2`
-     - Check connection: `lsusb`
-   - **Auto mode**: System tries picamera2 first, then falls back to OpenCV
+     - Make sure camera is properly connected
+     - Check cable connection (Pi 5 uses 15-pin connector)
+   - **Note**: USB webcams are NOT supported in this version
 
 2. **"Model file not found" error**:
    - Verify model exists: `ls -la yolov12n-face.pt`
@@ -332,7 +313,17 @@ class Config:
    - If OpenCV fails, try: `pip install --upgrade opencv-python`
    - **Note:** We use pip-installed OpenCV, not system OpenCV, so missing apt packages are OK
 
-6. **python-prctl build error** ("You need to install libcap development headers"):
+6. **"No module named picamera2" error**:
+   ```bash
+   source face_detection_env/bin/activate
+   pip install picamera2
+   ```
+   This usually means:
+   - Virtual environment is not activated: `source face_detection_env/bin/activate`
+   - picamera2 didn't install during setup: Re-run `./setup.sh`
+   - Running Python outside virtual environment: Always activate venv first
+
+7. **python-prctl build error** ("You need to install libcap development headers"):
    ```bash
    # Try standard package name
    sudo apt install -y libcap-dev
