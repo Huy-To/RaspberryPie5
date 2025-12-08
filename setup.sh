@@ -34,8 +34,7 @@ echo "🔧 Installing essential system dependencies..."
 sudo apt install -y \
     python3-pip \
     python3-venv \
-    python3-dev \
-    libcap-dev
+    python3-dev
 
 # Try to install optional packages (continue if they fail)
 echo "🔧 Installing optional system dependencies (if available)..."
@@ -48,6 +47,23 @@ else
     echo "⚠️  System OpenCV not available, will use pip-installed version"
 fi
 
+# Try to install libcap-dev (required for picamera2/python-prctl)
+# Try multiple package names as they vary by OS version
+LIBCAP_INSTALLED=false
+for pkg in libcap-dev libcap2-dev; do
+    if sudo apt install -y "$pkg" 2>/dev/null; then
+        echo "✅ Installed: $pkg (required for picamera2)"
+        LIBCAP_INSTALLED=true
+        break
+    fi
+done
+
+if [ "$LIBCAP_INSTALLED" = false ]; then
+    echo "⚠️  libcap-dev not available (tried libcap-dev and libcap2-dev)"
+    echo "   This may cause picamera2 installation to fail, but OpenCV/USB cameras will still work"
+    echo "   If you need picamera2, you may need to build libcap from source or use a different OS version"
+fi
+
 # Try to install other optional packages
 for pkg in libopencv-dev libatlas-base-dev libhdf5-dev libhdf5-serial-dev; do
     if sudo apt install -y "$pkg" 2>/dev/null; then
@@ -56,12 +72,6 @@ for pkg in libopencv-dev libatlas-base-dev libhdf5-dev libhdf5-serial-dev; do
         echo "⚠️  Package not available: $pkg (skipping - not critical)"
     fi
 done
-
-# Note: libcap-dev is required for python-prctl (picamera2 dependency)
-# It's already installed above, but we verify it here
-if dpkg -l | grep -q "^ii.*libcap-dev"; then
-    echo "✅ libcap-dev installed (required for picamera2)"
-fi
 
 set -e  # Re-enable exit on error
 
@@ -81,8 +91,24 @@ pip install --upgrade pip setuptools wheel
 # Install Python dependencies
 echo "📚 Installing Python dependencies..."
 echo "   This may take several minutes on Raspberry Pi..."
-echo "   Installing OpenCV, picamera2, and other packages via pip..."
-pip install --no-cache-dir -r requirements.txt
+
+# Install core dependencies first (these should always work)
+echo "   Installing core packages (ultralytics, opencv-python, numpy)..."
+pip install --no-cache-dir ultralytics opencv-python numpy
+
+# Try to install picamera2 separately (it may fail if libcap-dev is missing)
+echo "   Attempting to install picamera2 (for Raspberry Pi Camera Module)..."
+set +e  # Don't exit on error for picamera2
+PICAMERA2_INSTALLED=false
+if pip install --no-cache-dir picamera2 2>/dev/null; then
+    echo "✅ picamera2 installed successfully"
+    PICAMERA2_INSTALLED=true
+else
+    echo "⚠️  picamera2 installation failed (likely due to missing libcap-dev)"
+    echo "   This is OK if you're using USB webcam instead of Pi Camera Module"
+    echo "   You can use: --camera-type opencv for USB webcams"
+fi
+set -e  # Re-enable exit on error
 
 # Verify installations
 echo "🔍 Verifying installations..."
@@ -102,7 +128,14 @@ fi
 if python3 -c "from picamera2 import Picamera2; print('✅ picamera2 installed successfully')" 2>/dev/null; then
     echo "✅ picamera2 is ready to use (for Raspberry Pi Camera Module)"
 else
-    echo "⚠️  picamera2 not available (this is OK if using USB webcam)"
+    echo "⚠️  picamera2 not available"
+    if [ "$LIBCAP_INSTALLED" = false ]; then
+        echo "   Reason: libcap-dev package not found in repositories"
+        echo "   Solution: Use USB webcam with --camera-type opencv"
+    else
+        echo "   Installation may have failed for another reason"
+        echo "   You can still use USB webcam with --camera-type opencv"
+    fi
 fi
 
 # Check if model file exists

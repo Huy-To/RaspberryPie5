@@ -75,12 +75,18 @@ If you prefer manual installation or the script fails:
 1. **Install essential system dependencies**:
    ```bash
    sudo apt update
-   sudo apt install -y python3-pip python3-venv python3-dev libcap-dev
+   sudo apt install -y python3-pip python3-venv python3-dev
+   ```
+   
+   **Optional (for picamera2/Pi Camera Module):**
+   ```bash
+   # Try to install libcap-dev (may not be available on all OS versions)
+   sudo apt install -y libcap-dev || sudo apt install -y libcap2-dev || echo "libcap-dev not available"
    ```
    
    **Note:** 
    - OpenCV will be installed via pip (included in requirements.txt)
-   - `libcap-dev` is required for picamera2 (Raspberry Pi Camera Module support)
+   - `libcap-dev` is required for picamera2, but if unavailable, you can use USB webcam instead
 
 2. **Create virtual environment**:
    ```bash
@@ -328,10 +334,19 @@ class Config:
 
 6. **python-prctl build error** ("You need to install libcap development headers"):
    ```bash
+   # Try standard package name
    sudo apt install -y libcap-dev
-   pip install --upgrade picamera2
+   
+   # If that fails, try alternative
+   sudo apt install -y libcap2-dev
+   
+   # If both fail, you can still use USB webcam instead
+   # Just use: --camera-type opencv when running
    ```
-   This error occurs when installing picamera2. Installing `libcap-dev` fixes it.
+   This error occurs when installing picamera2. If `libcap-dev` is not available in your OS version:
+   - **Option 1**: Use USB webcam with `--camera-type opencv` (recommended)
+   - **Option 2**: Build libcap from source (advanced)
+   - **Option 3**: Update to a newer Raspberry Pi OS version that includes libcap-dev
 
 6. **Display/GUI errors**:
    - If running headless (no display), the system will still process frames
