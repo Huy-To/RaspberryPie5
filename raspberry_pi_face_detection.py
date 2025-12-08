@@ -23,7 +23,14 @@ from ultralytics import YOLO
 import argparse
 import sys
 from pathlib import Path
-from PIL import Image, ImageDraw, ImageFont
+from PIL import Image, ImageDraw, ImageFont, ImageTk
+try:
+    import tkinter as tk
+    TKINTER_AVAILABLE = True
+except ImportError:
+    TKINTER_AVAILABLE = False
+    tk = None
+    print("⚠️  Warning: tkinter not available. Display window will not be shown.")
 
 # Import picamera2 for Raspberry Pi Camera Module
 try:
@@ -112,9 +119,15 @@ class RaspberryPiFaceDetector:
         self.last_detections = []
         self.last_detection_time = 0
         
+        # Display window (tkinter)
+        self.root = None
+        self.display_label = None
+        self.display_enabled = False
+        
         print("🚀 Initializing Raspberry Pi 5 Face Detection System (Picamera2 Only)...")
         self.initialize_model()
         self.initialize_camera()
+        self.initialize_display()
         
     def initialize_model(self):
         """Initialize the YOLO face detection model"""
@@ -184,6 +197,74 @@ class RaspberryPiFaceDetector:
             print("   3. Test camera: rpicam-hello")
             print("   4. Check camera connection and cable")
             sys.exit(1)
+    
+    def initialize_display(self):
+        """Initialize tkinter display window"""
+        if not TKINTER_AVAILABLE:
+            print("⚠️  tkinter not available - running in console-only mode")
+            self.display_enabled = False
+            return
+        
+        try:
+            self.root = tk.Tk()
+            self.root.title("Raspberry Pi Face Detection")
+            self.root.protocol("WM_DELETE_WINDOW", self.on_closing)
+            
+            # Create label for displaying frames
+            self.display_label = tk.Label(self.root)
+            self.display_label.pack()
+            
+            self.display_enabled = True
+            print("✅ Display window initialized")
+        except Exception as e:
+            print(f"⚠️  Could not initialize display window: {e}")
+            print("   Running in console-only mode")
+            self.display_enabled = False
+    
+    def update_display(self, frame):
+        """
+        Update the display window with a new frame
+        
+        Args:
+            frame: PIL Image or numpy array (RGB format)
+        """
+        if not self.display_enabled or self.root is None or self.display_label is None:
+            return
+        
+        try:
+            # Convert to PIL Image if needed
+            if isinstance(frame, np.ndarray):
+                pil_image = Image.fromarray(frame)
+            else:
+                pil_image = frame
+            
+            # Resize if needed to fit window (optional - can be removed for full resolution)
+            # For now, keep original size
+            
+            # Convert to PhotoImage
+            photo = ImageTk.PhotoImage(image=pil_image)
+            
+            # Update label
+            self.display_label.configure(image=photo)
+            self.display_label.image = photo  # Keep a reference
+            
+            # Update window size to match image
+            self.root.geometry(f"{pil_image.width}x{pil_image.height}")
+            
+            # Process tkinter events (non-blocking)
+            self.root.update_idletasks()
+            self.root.update()
+            
+        except Exception as e:
+            # Silently handle display errors to avoid breaking the main loop
+            pass
+    
+    def on_closing(self):
+        """Handle window closing event"""
+        print("\n🛑 Window closed by user")
+        self.is_running = False
+        if self.root:
+            self.root.destroy()
     
     def detect_faces(self, frame):
         """
@@ -377,8 +458,12 @@ class RaspberryPiFaceDetector:
         print("🎬 Starting face detection...")
         print("📋 System Information:")
         print("   - Camera: Raspberry Pi Camera Module (picamera2)")
-        print("   - Display: Console output only")
-        print("   - Press Ctrl+C to quit")
+        if self.display_enabled:
+            print("   - Display: Window + Console output")
+            print("   - Close window or Press Ctrl+C to quit")
+        else:
+            print("   - Display: Console output only")
+            print("   - Press Ctrl+C to quit")
         print()
         
         self.is_running = True
@@ -477,6 +562,13 @@ class RaspberryPiFaceDetector:
                              fill=self.config.WARNING_COLOR, font=font)
                     frame = np.array(pil_image)
                 
+                # Update display window
+                self.update_display(frame)
+                
+                # Check if window was closed
+                if not self.is_running:
+                    break
+                
                 # Small delay to prevent overwhelming the system
                 time.sleep(0.01)
         
@@ -498,6 +590,13 @@ class RaspberryPiFaceDetector:
         if self.picam2:
             try:
                 self.picam2.stop()
+            except:
+                pass
+        
+        # Clean up display window
+        if self.root:
+            try:
+                self.root.destroy()
             except:
                 pass
         

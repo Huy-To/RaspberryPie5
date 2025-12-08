@@ -32,6 +32,7 @@ A real-time face detection system optimized for Raspberry Pi 5 using YOLOv12n-fa
 ## 🚀 Features
 
 - **Real-time face detection** with live camera feed
+- **Display window** showing video feed with detections (tkinter-based)
 - **Optimized for Raspberry Pi 5** performance
 - **Configurable detection parameters** (confidence threshold, resize factor, etc.)
 - **Performance monitoring** with FPS tracking and processing statistics
@@ -53,6 +54,7 @@ A real-time face detection system optimized for Raspberry Pi 5 using YOLOv12n-fa
 - Python 3.8 or higher
 - Camera enabled in raspi-config
 - **picamera2 library** (installed automatically)
+- **tkinter** (usually pre-installed with Python, required for display window)
 
 ## 🛠️ Installation
 
@@ -188,11 +190,14 @@ python3 raspberry_pi_face_detection.py --no-console
 
 ## 🎮 Controls
 
-**Note:** This version outputs to console only (no GUI window).
+**Display Window:**
+- A tkinter window displays the live camera feed with face detection overlays
+- Close the window or press **Ctrl+C** to quit
+- If tkinter is not available, the system runs in console-only mode
 
-- **Ctrl+C**: Quit the application
+**Console Output:**
 - Detection results are printed to console
-- Performance stats are displayed in console output
+- Performance stats (FPS, face count, processing time) are displayed in console output
 
 ## ⚡ Performance Optimization
 
@@ -397,10 +402,12 @@ class Config:
    - **Option 5**: Install build-essential first: `sudo apt install -y build-essential`
    - **After fixing libcap-dev**: `python3 -m pip install --break-system-packages picamera2`
 
-6. **Display/GUI errors**:
-   - If running headless (no display), the system will still process frames
-   - For SSH: Use X11 forwarding: `ssh -X pi@your-pi-ip`
-   - Or use VNC for remote desktop access
+6. **Display window not showing**:
+   - **tkinter not available**: Install with `sudo apt install -y python3-tk`
+   - **Running headless**: The system will run in console-only mode if tkinter is not available
+   - **SSH without display**: Use X11 forwarding: `ssh -X pi@your-pi-ip`
+   - **Remote desktop**: Use VNC for remote desktop access
+   - **Note**: The system will still process frames and output to console even without the display window
 
 ### Performance Monitoring
 
