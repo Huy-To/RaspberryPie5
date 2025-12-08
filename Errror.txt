@@ -23,3 +23,29 @@ WARNING: The script wheel is installed in '/home/pi/.local/bin' which is not on 
   WARNING: The scripts pip, pip3 and pip3.11 are installed in '/home/pi/.local/bin' which is not on PATH.
   Consider adding this directory to PATH or, if you prefer to suppress this warning, use --no-warn-script-location.
 
+pi@raspberrypi:~/RaspberryPie5 $ ./run.sh
+🎬 Starting Raspberry Pi 5 Face Detection System...
+=================================================
+🔍 Checking picamera2 installation...
+❌ picamera2 not found
+📦 Installing picamera2...
+Defaulting to user installation because normal site-packages is not writeable
+Looking in indexes: https://pypi.org/simple, https://www.piwheels.org/simple
+Requirement already satisfied: picamera2 in /usr/lib/python3/dist-packages (0.3.31)
+Requirement already satisfied: numpy in /home/pi/.local/lib/python3.11/site-packages (from picamera2) (2.2.6)
+Requirement already satisfied: PiDNG in /usr/lib/python3/dist-packages (from picamera2) (4.0.9)
+Requirement already satisfied: piexif in /usr/lib/python3/dist-packages (from picamera2) (1.1.3)
+Requirement already satisfied: pillow in /usr/lib/python3/dist-packages (from picamera2) (9.4.0)
+Requirement already satisfied: simplejpeg in /usr/lib/python3/dist-packages (from picamera2) (1.8.1)
+Requirement already satisfied: videodev2 in /usr/lib/python3/dist-packages (from picamera2) (0.0.4)
+Requirement already satisfied: python-prctl in /usr/lib/python3/dist-packages (from picamera2) (1.8.1)
+Requirement already satisfied: av in /usr/lib/python3/dist-packages (from picamera2) (12.3.0)
+Requirement already satisfied: libarchive-c in /usr/lib/python3/dist-packages (from picamera2) (2.9)
+Requirement already satisfied: tqdm in /usr/lib/python3/dist-packages (from picamera2) (4.64.1)
+Requirement already satisfied: jsonschema in /usr/lib/python3/dist-packages (from picamera2) (4.10.3)
+Requirement already satisfied: attrs>=17.4.0 in /usr/lib/python3/dist-packages (from jsonschema->picamera2) (22.2.0)
+Requirement already satisfied: pyrsistent!=0.17.0,!=0.17.1,!=0.17.2,>=0.14.0 in /usr/lib/python3/dist-packages (from jsonschema->picamera2) (0.18.1)
+WARNING: Error parsing dependencies of send2trash: Expected matching RIGHT_PARENTHESIS for LEFT_PARENTHESIS, after version specifier
+    sys-platform (=="darwin") ; extra == 'objc'
+                 ~^
+❌ Failed to install picamera2. Please run setup.sh first.
