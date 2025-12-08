@@ -95,12 +95,18 @@ If you prefer manual installation or the script fails:
 
 2. **Install Python dependencies**:
    ```bash
-   python3 -m pip install --upgrade pip setuptools wheel --break-system-packages
-   python3 -m pip install --break-system-packages -r requirements.txt
+   # Add ~/.local/bin to PATH (if not already there)
+   export PATH="$HOME/.local/bin:$PATH"
+   
+   # Install packages
+   python3 -m pip install --upgrade pip setuptools wheel --break-system-packages --no-warn-script-location
+   python3 -m pip install --break-system-packages --no-warn-script-location -r requirements.txt
    ```
    
-   **Note:** `--break-system-packages` flag is required on newer Raspberry Pi OS versions
-   that use PEP 668 (externally-managed-environment). This installs packages system-wide.
+   **Note:** 
+   - `--break-system-packages` flag is required on newer Raspberry Pi OS versions (PEP 668)
+   - `--no-warn-script-location` suppresses PATH warnings
+   - The setup script automatically adds `~/.local/bin` to your PATH
    
    This will install picamera2, ultralytics, Pillow, and numpy system-wide.
 
@@ -313,12 +319,11 @@ class Config:
    - Increase swap size (see System-Level Optimizations in README)
    - Use lower resolution or reduce resize factor
 
-5. **Import errors (ultralytics, cv2, etc.)**:
-   - Make sure virtual environment is activated: `source face_detection_env/bin/activate`
-   - Reinstall dependencies: `pip install --upgrade -r requirements.txt`
-   - Check if OpenCV is installed: `python3 -c "import cv2; print(cv2.__version__)"`
-   - If OpenCV fails, try: `pip install --upgrade opencv-python`
-   - **Note:** We use pip-installed OpenCV, not system OpenCV, so missing apt packages are OK
+5. **Import errors (ultralytics, picamera2, etc.)**:
+   - Reinstall dependencies: `python3 -m pip install --break-system-packages --no-warn-script-location -r requirements.txt`
+   - Check if picamera2 is installed: `python3 -c "from picamera2 import Picamera2; print('OK')"`
+   - Check if ultralytics is installed: `python3 -c "from ultralytics import YOLO; print('OK')"`
+   - If packages fail, try: `python3 -m pip install --upgrade --break-system-packages --no-warn-script-location package_name`
 
 6. **"No module named picamera2" error**:
    ```bash
@@ -333,8 +338,21 @@ class Config:
    The setup script uses `--break-system-packages` flag to work around this.
    If you see this error manually, add the flag:
    ```bash
-   python3 -m pip install --break-system-packages package_name
+   python3 -m pip install --break-system-packages --no-warn-script-location package_name
    ```
+
+8. **PATH warnings** ("script is installed in '/home/pi/.local/bin' which is not on PATH"):
+   The setup script automatically adds `~/.local/bin` to your PATH.
+   If you still see warnings:
+   ```bash
+   # Add to current session
+   export PATH="$HOME/.local/bin:$PATH"
+   
+   # Add permanently to ~/.bashrc
+   echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.bashrc
+   source ~/.bashrc
+   ```
+   Or restart your terminal session.
 
 7. **python-prctl build error** ("You need to install libcap development headers"):
    ```bash

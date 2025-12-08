@@ -47,7 +47,9 @@ fi
 # Now try to install picamera2
 echo ""
 echo "📦 Installing picamera2..."
-if python3 -m pip install --no-cache-dir --break-system-packages picamera2; then
+# Ensure PATH includes ~/.local/bin
+export PATH="$HOME/.local/bin:$PATH"
+if python3 -m pip install --no-cache-dir --break-system-packages --no-warn-script-location picamera2; then
     echo "✅ picamera2 installed successfully!"
     echo ""
     echo "You can now run: ./setup.sh (or continue with existing setup)"

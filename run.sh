@@ -11,7 +11,9 @@ echo "🔍 Checking picamera2 installation..."
 if ! python3 -c "from picamera2 import Picamera2" 2>/dev/null; then
     echo "❌ picamera2 not found"
     echo "📦 Installing picamera2..."
-    python3 -m pip install --no-cache-dir --break-system-packages picamera2
+    # Ensure PATH includes ~/.local/bin
+    export PATH="$HOME/.local/bin:$PATH"
+    python3 -m pip install --no-cache-dir --break-system-packages --no-warn-script-location picamera2
     if python3 -c "from picamera2 import Picamera2" 2>/dev/null; then
         echo "✅ picamera2 installed successfully"
     else

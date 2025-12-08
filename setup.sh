@@ -90,10 +90,36 @@ done
 
 set -e  # Re-enable exit on error
 
+# Add ~/.local/bin to PATH if not already there
+echo "🔧 Configuring PATH..."
+LOCAL_BIN="$HOME/.local/bin"
+if [[ ":$PATH:" != *":$LOCAL_BIN:"* ]]; then
+    export PATH="$LOCAL_BIN:$PATH"
+    echo "   Added $LOCAL_BIN to PATH for this session"
+    
+    # Add to .bashrc for persistence (if it exists and not already added)
+    if [ -f "$HOME/.bashrc" ] && ! grep -q "$LOCAL_BIN" "$HOME/.bashrc"; then
+        echo "" >> "$HOME/.bashrc"
+        echo "# Added by Raspberry Pi Face Detection setup" >> "$HOME/.bashrc"
+        echo "export PATH=\"\$HOME/.local/bin:\$PATH\"" >> "$HOME/.bashrc"
+        echo "   Added $LOCAL_BIN to ~/.bashrc for future sessions"
+    fi
+    
+    # Also add to .profile if it exists (for login shells)
+    if [ -f "$HOME/.profile" ] && ! grep -q "$LOCAL_BIN" "$HOME/.profile"; then
+        echo "" >> "$HOME/.profile"
+        echo "# Added by Raspberry Pi Face Detection setup" >> "$HOME/.profile"
+        echo "export PATH=\"\$HOME/.local/bin:\$PATH\"" >> "$HOME/.profile"
+        echo "   Added $LOCAL_BIN to ~/.profile for login shells"
+    fi
+else
+    echo "   $LOCAL_BIN is already in PATH"
+fi
+
 # Upgrade pip (using system Python)
 echo "⬆️  Upgrading pip..."
 echo "   Note: Using --break-system-packages flag (required on newer Raspberry Pi OS)"
-python3 -m pip install --upgrade pip setuptools wheel --break-system-packages
+python3 -m pip install --upgrade pip setuptools wheel --break-system-packages --no-warn-script-location
 
 # Install Python dependencies
 echo "📚 Installing Python dependencies..."
@@ -101,7 +127,7 @@ echo "   This may take several minutes on Raspberry Pi..."
 
 # Install core dependencies first (these don't need libcap-dev)
 echo "   Installing core packages (ultralytics, numpy, Pillow)..."
-python3 -m pip install --no-cache-dir --break-system-packages ultralytics numpy Pillow
+python3 -m pip install --no-cache-dir --break-system-packages --no-warn-script-location ultralytics numpy Pillow
 
 # Install picamera2 separately (requires libcap-dev)
 echo "   Installing picamera2 (requires libcap-dev)..."
@@ -111,7 +137,7 @@ if [ "$LIBCAP_INSTALLED" = false ]; then
 fi
 
 set +e  # Don't exit on error for picamera2
-if python3 -m pip install --no-cache-dir --break-system-packages picamera2 2>&1 | tee /tmp/picamera2_install.log; then
+if python3 -m pip install --no-cache-dir --break-system-packages --no-warn-script-location picamera2 2>&1 | tee /tmp/picamera2_install.log; then
     echo "✅ picamera2 installed successfully"
     PICAMERA2_INSTALLED=true
 else
@@ -157,7 +183,7 @@ if python3 -c "from PIL import Image; print(f'✅ Pillow {Image.__version__} ins
     echo "✅ Pillow is ready to use"
 else
     echo "❌ Pillow installation failed. Trying to fix..."
-    python3 -m pip install --upgrade --no-cache-dir --break-system-packages Pillow
+    python3 -m pip install --upgrade --no-cache-dir --break-system-packages --no-warn-script-location Pillow
     if python3 -c "from PIL import Image" 2>/dev/null; then
         echo "✅ Pillow fixed"
     else
@@ -214,6 +240,11 @@ echo "   Run: ./run.sh"
 echo ""
 echo "   Or directly:"
 echo "   python3 raspberry_pi_face_detection.py"
+echo ""
+echo "📝 PATH Configuration:"
+echo "   ~/.local/bin has been added to your PATH"
+echo "   If you open a new terminal, run: source ~/.bashrc"
+echo "   Or restart your terminal session"
 echo ""
 echo "🎮 Runtime Controls:"
 echo "   - 'q' or ESC: Quit"
