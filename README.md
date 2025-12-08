@@ -131,9 +131,10 @@ python3 raspberry_pi_face_detection.py
 ```
 
 **First time running?** Make sure:
-- Camera is connected (USB webcam or Pi Camera Module)
-- Camera is enabled (for Pi Camera: `sudo raspi-config` → Interface Options → Camera)
-- You have a display connected (or use SSH with X11 forwarding)
+- Camera is connected (Raspberry Pi Camera Module)
+- Camera is enabled: `sudo raspi-config` → Interface Options → Camera
+- Test camera works: `rpicam-hello` (should show camera feed for 5 seconds)
+- Test Python access: `python3 test_camera.py` (after setup)
 
 ### Camera Support
 
@@ -279,14 +280,21 @@ class Config:
 
 1. **Camera not detected**:
    ```bash
-   # Test Raspberry Pi Camera Module
+   # Test Raspberry Pi Camera Module (system level)
    rpicam-hello
+   
+   # Test Python picamera2 access
+   python3 test_camera.py
    ```
-   - **Raspberry Pi Camera Module**: 
-     - Enable in `sudo raspi-config` → Interface Options → Camera
-     - Test with: `rpicam-hello`
-     - Make sure camera is properly connected
-     - Check cable connection (Pi 5 uses 15-pin connector)
+   - **If `rpicam-hello` works but Python test fails**:
+     - Camera hardware is fine ✅
+     - Issue is with picamera2 installation
+     - Make sure picamera2 is installed: `pip install picamera2`
+     - Check virtual environment is activated
+   - **If `rpicam-hello` fails**:
+     - Enable camera: `sudo raspi-config` → Interface Options → Camera
+     - Check camera connection (Pi 5 uses 15-pin connector)
+     - Verify camera is properly seated
    - **Note**: USB webcams are NOT supported in this version
 
 2. **"Model file not found" error**:
@@ -325,19 +333,30 @@ class Config:
 
 7. **python-prctl build error** ("You need to install libcap development headers"):
    ```bash
-   # Try standard package name
+   # Quick fix - run this script
+   chmod +x fix_libcap.sh
+   ./fix_libcap.sh
+   
+   # Or manually:
+   sudo apt update
    sudo apt install -y libcap-dev
-   
-   # If that fails, try alternative
+   # If that fails, try:
    sudo apt install -y libcap2-dev
+   # Or:
+   sudo apt install -y libcap2
    
-   # If both fail, you can still use USB webcam instead
-   # Just use: --camera-type opencv when running
+   # Then install picamera2
+   source face_detection_env/bin/activate
+   pip install picamera2
    ```
-   This error occurs when installing picamera2. If `libcap-dev` is not available in your OS version:
-   - **Option 1**: Use USB webcam with `--camera-type opencv` (recommended)
-   - **Option 2**: Build libcap from source (advanced)
-   - **Option 3**: Update to a newer Raspberry Pi OS version that includes libcap-dev
+   This error occurs when installing picamera2. The `python-prctl` dependency requires libcap development headers.
+   
+   **Solutions:**
+   - **Option 1**: Run the fix script: `./fix_libcap.sh`
+   - **Option 2**: Install manually: `sudo apt install -y libcap-dev`
+   - **Option 3**: Try alternative package: `sudo apt install -y libcap2-dev` or `libcap2`
+   - **Option 4**: Update your system: `sudo apt update && sudo apt upgrade`
+   - **Option 5**: Install build-essential first: `sudo apt install -y build-essential`
 
 6. **Display/GUI errors**:
    - If running headless (no display), the system will still process frames

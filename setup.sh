@@ -40,21 +40,44 @@ sudo apt install -y \
 echo "🔧 Installing optional system dependencies (if available)..."
 set +e  # Don't exit on error for optional packages
 
-# Try to install libcap-dev (required for picamera2/python-prctl)
+# Try to install libcap-dev (REQUIRED for picamera2/python-prctl)
 # Try multiple package names as they vary by OS version
+echo "🔧 Installing libcap-dev (REQUIRED for picamera2)..."
 LIBCAP_INSTALLED=false
-for pkg in libcap-dev libcap2-dev; do
-    if sudo apt install -y "$pkg" 2>/dev/null; then
-        echo "✅ Installed: $pkg (required for picamera2)"
-        LIBCAP_INSTALLED=true
-        break
+LIBCAP_PKG=""
+
+# First, try installing build-essential (sometimes needed for libcap-dev)
+echo "   Installing build-essential (may be needed for libcap-dev)..."
+sudo apt install -y build-essential 2>/dev/null || true
+
+# Try different package names
+for pkg in libcap-dev libcap2-dev libcap2; do
+    echo "   Trying: $pkg"
+    if sudo apt install -y "$pkg" 2>&1 | grep -q "Setting up\|is already\|0 upgraded"; then
+        # Verify it's actually installed
+        if dpkg -l | grep -q "^ii.*libcap"; then
+            echo "✅ Installed: $pkg (required for picamera2)"
+            LIBCAP_INSTALLED=true
+            LIBCAP_PKG="$pkg"
+            break
+        fi
     fi
 done
 
 if [ "$LIBCAP_INSTALLED" = false ]; then
-    echo "⚠️  libcap-dev not available (tried libcap-dev and libcap2-dev)"
-    echo "   This may cause picamera2 installation to fail, but OpenCV/USB cameras will still work"
-    echo "   If you need picamera2, you may need to build libcap from source or use a different OS version"
+    echo ""
+    echo "❌ libcap-dev not available (tried: libcap-dev, libcap2-dev, libcap2)"
+    echo ""
+    echo "⚠️  CRITICAL: picamera2 requires libcap development headers!"
+    echo ""
+    echo "Troubleshooting:"
+    echo "  1. Check available packages: apt-cache search libcap"
+    echo "  2. Try: sudo apt install -y libcap-dev"
+    echo "  3. Or run the fix script: chmod +x fix_libcap.sh && ./fix_libcap.sh"
+    echo "  4. You may need to update: sudo apt update && sudo apt upgrade"
+    echo ""
+    echo "Attempting to continue anyway, but picamera2 installation will likely fail..."
+    echo ""
 fi
 
 # Try to install other optional packages
@@ -84,26 +107,57 @@ pip install --upgrade pip setuptools wheel
 # Install Python dependencies
 echo "📚 Installing Python dependencies..."
 echo "   This may take several minutes on Raspberry Pi..."
-echo "   Installing ultralytics, picamera2, Pillow, and numpy..."
 
-# Install all dependencies from requirements.txt
-pip install --no-cache-dir -r requirements.txt
+# Install core dependencies first (these don't need libcap-dev)
+echo "   Installing core packages (ultralytics, numpy, Pillow)..."
+pip install --no-cache-dir ultralytics numpy Pillow
+
+# Install picamera2 separately (requires libcap-dev)
+echo "   Installing picamera2 (requires libcap-dev)..."
+if [ "$LIBCAP_INSTALLED" = false ]; then
+    echo "   ⚠️  WARNING: libcap-dev not installed. picamera2 installation may fail."
+    echo "   If it fails, install libcap-dev manually and run: pip install picamera2"
+fi
+
+set +e  # Don't exit on error for picamera2
+if pip install --no-cache-dir picamera2 2>&1 | tee /tmp/picamera2_install.log; then
+    echo "✅ picamera2 installed successfully"
+    PICAMERA2_INSTALLED=true
+else
+    echo ""
+    echo "❌ picamera2 installation failed!"
+    echo ""
+    if grep -q "libcap" /tmp/picamera2_install.log 2>/dev/null; then
+        echo "   Error: Missing libcap development headers"
+        echo ""
+        echo "   SOLUTION: Install libcap-dev first:"
+        echo "   sudo apt install -y libcap-dev"
+        echo "   Then run: pip install picamera2"
+        echo ""
+        echo "   Or try alternative package names:"
+        echo "   sudo apt install -y libcap2-dev"
+        echo "   sudo apt install -y libcap2"
+    fi
+    echo "   Full error log saved to: /tmp/picamera2_install.log"
+    PICAMERA2_INSTALLED=false
+    exit 1  # Exit on failure since picamera2 is required
+fi
+set -e  # Re-enable exit on error
 
 # Verify installations
 echo "🔍 Verifying installations..."
 
 # Verify picamera2 (REQUIRED)
-if python3 -c "from picamera2 import Picamera2; print('✅ picamera2 installed successfully')" 2>/dev/null; then
-    echo "✅ picamera2 is ready to use (REQUIRED for Raspberry Pi Camera Module)"
+if [ "$PICAMERA2_INSTALLED" = true ]; then
+    if python3 -c "from picamera2 import Picamera2; print('✅ picamera2 installed successfully')" 2>/dev/null; then
+        echo "✅ picamera2 is ready to use (REQUIRED for Raspberry Pi Camera Module)"
+    else
+        echo "⚠️  picamera2 installed but import failed. This may indicate a compatibility issue."
+    fi
 else
     echo "❌ picamera2 installation failed!"
-    if [ "$LIBCAP_INSTALLED" = false ]; then
-        echo "   Reason: libcap-dev package not found in repositories"
-        echo "   Solution: Install libcap-dev or libcap2-dev"
-    else
-        echo "   Please check the error messages above"
-    fi
-    echo "   Try: pip install --upgrade picamera2"
+    echo "   This system requires picamera2 to work."
+    echo "   Please fix the libcap-dev issue and re-run setup.sh"
     exit 1
 fi
 
@@ -142,12 +196,16 @@ fi
 # Test camera access (non-blocking - just a warning if it fails)
 echo "📹 Testing camera access..."
 set +e  # Temporarily disable exit on error for camera test
-if python3 -c "from picamera2 import Picamera2; cam = Picamera2(); cam.start(); cam.stop(); print('✅ Camera accessible')" 2>/dev/null; then
-    echo "✅ Raspberry Pi Camera Module accessible"
+if python3 test_camera.py 2>/dev/null; then
+    echo "✅ Camera test passed - everything is working!"
 else
-    echo "⚠️  Camera not accessible right now. This is OK if camera is not connected."
-    echo "   You can test it later when running the application."
-    echo "   Test with: rpicam-hello"
+    echo "⚠️  Camera test failed, but this is OK if:"
+    echo "   - Camera is not connected right now"
+    echo "   - You want to test later"
+    echo ""
+    echo "   To test manually:"
+    echo "   - System test: rpicam-hello"
+    echo "   - Python test: python3 test_camera.py"
 fi
 set -e  # Re-enable exit on error
 
