@@ -47,11 +47,7 @@ fi
 # Now try to install picamera2
 echo ""
 echo "📦 Installing picamera2..."
-if [ -d "face_detection_env" ]; then
-    source face_detection_env/bin/activate
-fi
-
-if pip install --no-cache-dir picamera2; then
+if python3 -m pip install --no-cache-dir --user picamera2; then
     echo "✅ picamera2 installed successfully!"
     echo ""
     echo "You can now run: ./setup.sh (or continue with existing setup)"

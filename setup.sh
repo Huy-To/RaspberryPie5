@@ -33,7 +33,6 @@ sudo apt update
 echo "🔧 Installing essential system dependencies..."
 sudo apt install -y \
     python3-pip \
-    python3-venv \
     python3-dev
 
 # Try to install optional packages (continue if they fail)
@@ -91,18 +90,9 @@ done
 
 set -e  # Re-enable exit on error
 
-# Create virtual environment
-echo "🏠 Creating Python virtual environment..."
-if [ -d "face_detection_env" ]; then
-    echo "⚠️  Virtual environment already exists. Removing old one..."
-    rm -rf face_detection_env
-fi
-python3 -m venv face_detection_env
-source face_detection_env/bin/activate
-
-# Upgrade pip
+# Upgrade pip (using system Python)
 echo "⬆️  Upgrading pip..."
-pip install --upgrade pip setuptools wheel
+python3 -m pip install --upgrade pip setuptools wheel --user
 
 # Install Python dependencies
 echo "📚 Installing Python dependencies..."
@@ -110,17 +100,17 @@ echo "   This may take several minutes on Raspberry Pi..."
 
 # Install core dependencies first (these don't need libcap-dev)
 echo "   Installing core packages (ultralytics, numpy, Pillow)..."
-pip install --no-cache-dir ultralytics numpy Pillow
+python3 -m pip install --no-cache-dir --user ultralytics numpy Pillow
 
 # Install picamera2 separately (requires libcap-dev)
 echo "   Installing picamera2 (requires libcap-dev)..."
 if [ "$LIBCAP_INSTALLED" = false ]; then
     echo "   ⚠️  WARNING: libcap-dev not installed. picamera2 installation may fail."
-    echo "   If it fails, install libcap-dev manually and run: pip install picamera2"
+    echo "   If it fails, install libcap-dev manually and run: python3 -m pip install picamera2"
 fi
 
 set +e  # Don't exit on error for picamera2
-if pip install --no-cache-dir picamera2 2>&1 | tee /tmp/picamera2_install.log; then
+if python3 -m pip install --no-cache-dir --user picamera2 2>&1 | tee /tmp/picamera2_install.log; then
     echo "✅ picamera2 installed successfully"
     PICAMERA2_INSTALLED=true
 else
@@ -132,7 +122,7 @@ else
         echo ""
         echo "   SOLUTION: Install libcap-dev first:"
         echo "   sudo apt install -y libcap-dev"
-        echo "   Then run: pip install picamera2"
+        echo "   Then run: python3 -m pip install --user picamera2"
         echo ""
         echo "   Or try alternative package names:"
         echo "   sudo apt install -y libcap2-dev"
@@ -166,7 +156,7 @@ if python3 -c "from PIL import Image; print(f'✅ Pillow {Image.__version__} ins
     echo "✅ Pillow is ready to use"
 else
     echo "❌ Pillow installation failed. Trying to fix..."
-    pip install --upgrade --no-cache-dir Pillow
+    python3 -m pip install --upgrade --no-cache-dir --user Pillow
     if python3 -c "from PIL import Image" 2>/dev/null; then
         echo "✅ Pillow fixed"
     else
@@ -221,9 +211,8 @@ echo ""
 echo "📋 Quick Start:"
 echo "   Run: ./run.sh"
 echo ""
-echo "   Or manually:"
-echo "   1. source face_detection_env/bin/activate"
-echo "   2. python3 raspberry_pi_face_detection.py"
+echo "   Or directly:"
+echo "   python3 raspberry_pi_face_detection.py"
 echo ""
 echo "🎮 Runtime Controls:"
 echo "   - 'q' or ESC: Quit"

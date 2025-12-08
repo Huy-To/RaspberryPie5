@@ -6,26 +6,16 @@
 echo "🎬 Starting Raspberry Pi 5 Face Detection System..."
 echo "================================================="
 
-# Check if virtual environment exists
-if [ ! -d "face_detection_env" ]; then
-    echo "❌ Virtual environment not found. Please run setup.sh first."
-    exit 1
-fi
-
-# Activate virtual environment
-echo "🏠 Activating virtual environment..."
-source face_detection_env/bin/activate
-
 # Verify picamera2 is installed (REQUIRED)
 echo "🔍 Checking picamera2 installation..."
 if ! python3 -c "from picamera2 import Picamera2" 2>/dev/null; then
-    echo "❌ picamera2 not found in virtual environment"
+    echo "❌ picamera2 not found"
     echo "📦 Installing picamera2..."
-    pip install --no-cache-dir picamera2
+    python3 -m pip install --no-cache-dir --user picamera2
     if python3 -c "from picamera2 import Picamera2" 2>/dev/null; then
         echo "✅ picamera2 installed successfully"
     else
-        echo "❌ Failed to install picamera2. Please run setup.sh again."
+        echo "❌ Failed to install picamera2. Please run setup.sh first."
         exit 1
     fi
 else

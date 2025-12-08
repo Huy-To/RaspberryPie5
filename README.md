@@ -19,8 +19,13 @@ A real-time face detection system optimized for Raspberry Pi 5 using YOLOv12n-fa
    ```bash
    ./run.sh
    ```
+   
+   Or directly:
+   ```bash
+   python3 raspberry_pi_face_detection.py
+   ```
 
-**That's it!** The setup script handles everything automatically.
+**That's it!** The setup script installs everything system-wide (no virtual environment needed).
 
 ---
 
@@ -63,8 +68,7 @@ chmod +x setup.sh
 
 The setup script will:
 - ✅ Install all required system packages
-- ✅ Create a Python virtual environment
-- ✅ Install all Python dependencies
+- ✅ Install all Python dependencies (system-wide)
 - ✅ Verify the YOLO model file exists
 - ✅ Test camera access (if connected)
 
@@ -77,7 +81,7 @@ If you prefer manual installation or the script fails:
 1. **Install essential system dependencies**:
    ```bash
    sudo apt update
-   sudo apt install -y python3-pip python3-venv python3-dev
+   sudo apt install -y python3-pip python3-dev
    ```
    
    **Optional (for picamera2/Pi Camera Module):**
@@ -87,22 +91,15 @@ If you prefer manual installation or the script fails:
    ```
    
    **Note:** 
-   - OpenCV will be installed via pip (included in requirements.txt)
-   - `libcap-dev` is required for picamera2, but if unavailable, you can use USB webcam instead
+   - `libcap-dev` is required for picamera2
 
-2. **Create virtual environment**:
+2. **Install Python dependencies**:
    ```bash
-   python3 -m venv face_detection_env
-   source face_detection_env/bin/activate
-   ```
-
-3. **Install Python dependencies**:
-   ```bash
-   pip install --upgrade pip setuptools wheel
-   pip install -r requirements.txt
+   python3 -m pip install --upgrade pip setuptools wheel --user
+   python3 -m pip install --user -r requirements.txt
    ```
    
-   This will install picamera2, ultralytics, Pillow, and numpy.
+   This will install picamera2, ultralytics, Pillow, and numpy to your user directory.
 
 4. **Verify YOLO model**:
    - The `yolov12n-face.pt` model should be in the same directory
@@ -126,7 +123,6 @@ The run script automatically:
 **Or run directly:**
 
 ```bash
-source face_detection_env/bin/activate
 python3 raspberry_pi_face_detection.py
 ```
 
@@ -323,13 +319,11 @@ class Config:
 
 6. **"No module named picamera2" error**:
    ```bash
-   source face_detection_env/bin/activate
-   pip install picamera2
+   python3 -m pip install --user picamera2
    ```
    This usually means:
-   - Virtual environment is not activated: `source face_detection_env/bin/activate`
    - picamera2 didn't install during setup: Re-run `./setup.sh`
-   - Running Python outside virtual environment: Always activate venv first
+   - Or install manually: `python3 -m pip install --user picamera2`
 
 7. **python-prctl build error** ("You need to install libcap development headers"):
    ```bash
@@ -357,6 +351,7 @@ class Config:
    - **Option 3**: Try alternative package: `sudo apt install -y libcap2-dev` or `libcap2`
    - **Option 4**: Update your system: `sudo apt update && sudo apt upgrade`
    - **Option 5**: Install build-essential first: `sudo apt install -y build-essential`
+   - **After fixing libcap-dev**: `python3 -m pip install --user picamera2`
 
 6. **Display/GUI errors**:
    - If running headless (no display), the system will still process frames
