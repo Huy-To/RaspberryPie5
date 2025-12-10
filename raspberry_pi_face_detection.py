@@ -22,8 +22,21 @@ import queue
 from ultralytics import YOLO
 import argparse
 import sys
+import json
+import os
 from pathlib import Path
 from PIL import Image, ImageDraw, ImageFont
+
+# Try to import face_recognition library
+try:
+    import face_recognition
+    FACE_RECOGNITION_AVAILABLE = True
+except ImportError:
+    FACE_RECOGNITION_AVAILABLE = False
+    face_recognition = None
+    print("⚠️  Warning: face_recognition library not available.")
+    print("   Facial recognition features will be disabled.")
+    print("   Install with: pip install face_recognition")
 
 # Try to import ImageTk (requires both Pillow and tkinter)
 try:
@@ -95,8 +108,15 @@ class Config:
     SHOW_PERFORMANCE_STATS = True
     PRINT_TO_CONSOLE = True  # Print detection info to console
     
+    # Face recognition settings
+    FACE_DATABASE_PATH = "known_faces.json"
+    RECOGNITION_TOLERANCE = 0.6  # Lower = more strict (0.4-0.6 recommended)
+    ENABLE_FACE_RECOGNITION = True  # Set to False to disable recognition
+    
     # Colors (RGB format for PIL)
-    BOX_COLOR = (0, 255, 0)  # Green
+    BOX_COLOR = (0, 255, 0)  # Green for detected faces
+    RECOGNIZED_COLOR = (0, 255, 0)  # Green for recognized faces
+    UNKNOWN_COLOR = (255, 165, 0)  # Orange for unknown faces
     TEXT_COLOR = (0, 255, 0)  # Green
     FPS_COLOR = (255, 255, 0)  # Yellow
     WARNING_COLOR = (255, 0, 0)  # Red
@@ -137,16 +157,23 @@ class RaspberryPiFaceDetector:
         # Detection results cache
         self.last_boxes = []
         self.last_scores = []
+        self.last_names = []  # For face recognition
         self.last_detection_time = 0
+        
+        # Face recognition database
+        self.known_face_encodings = []
+        self.known_face_names = []
+        self.face_recognition_enabled = False
         
         # Display window (tkinter)
         self.root = None
         self.display_label = None
         self.display_enabled = False
         
-        print("🚀 Initializing Raspberry Pi 5 Face Detection System (Picamera2 Only)...")
+        print("🚀 Initializing Raspberry Pi 5 Face Detection & Recognition System (Picamera2 Only)...")
         self.initialize_model()
         self.initialize_camera()
+        self.initialize_face_recognition()
         self.initialize_display()
         
     def initialize_model(self):
@@ -217,6 +244,53 @@ class RaspberryPiFaceDetector:
             print("   3. Test camera: rpicam-hello")
             print("   4. Check camera connection and cable")
             sys.exit(1)
+    
+    def initialize_face_recognition(self):
+        """Initialize face recognition system and load known faces database"""
+        if not self.config.ENABLE_FACE_RECOGNITION:
+            print("ℹ️  Face recognition disabled in config")
+            return
+        
+        if not FACE_RECOGNITION_AVAILABLE:
+            print("⚠️  face_recognition library not available - recognition disabled")
+            print("   Install with: pip install face_recognition")
+            return
+        
+        try:
+            # Load known faces database
+            db_path = Path(self.config.FACE_DATABASE_PATH)
+            if db_path.exists():
+                print(f"📚 Loading face database from {db_path}...")
+                with open(db_path, 'r') as f:
+                    data = json.load(f)
+                
+                self.known_face_encodings = []
+                self.known_face_names = []
+                
+                for person_name, encodings in data.items():
+                    for encoding in encodings:
+                        # Convert list back to numpy array
+                        encoding_array = np.array(encoding)
+                        self.known_face_encodings.append(encoding_array)
+                        self.known_face_names.append(person_name)
+                
+                if len(self.known_face_names) > 0:
+                    unique_names = set(self.known_face_names)
+                    print(f"✅ Loaded {len(self.known_face_names)} face encoding(s) for {len(unique_names)} person(s)")
+                    for name in unique_names:
+                        count = self.known_face_names.count(name)
+                        print(f"   - {name}: {count} encoding(s)")
+                    self.face_recognition_enabled = True
+                else:
+                    print("⚠️  Face database is empty - recognition disabled")
+            else:
+                print(f"ℹ️  Face database not found at {db_path}")
+                print("   Run enrollment script to add faces: python3 enroll_face.py")
+                print("   Recognition will be disabled until faces are enrolled")
+        
+        except Exception as e:
+            print(f"⚠️  Error loading face database: {e}")
+            print("   Recognition disabled")
     
     def initialize_display(self):
         """Initialize tkinter display window"""
@@ -371,7 +445,71 @@ class RaspberryPiFaceDetector:
             print(f"⚠️ Error in face detection: {e}")
             return [], []
     
-    def draw_detections(self, frame, boxes, scores):
+    def recognize_faces(self, frame, boxes):
+        """
+        Recognize faces in detected boxes using face encodings
+        
+        Args:
+            frame: Input frame (numpy array, RGB format)
+            boxes: List of bounding boxes
+            
+        Returns:
+            list: List of recognized names (or "Unknown" for unrecognized faces)
+        """
+        if not self.face_recognition_enabled or len(self.known_face_encodings) == 0:
+            return ["Unknown"] * len(boxes) if boxes else []
+        
+        if not FACE_RECOGNITION_AVAILABLE or len(boxes) == 0:
+            return ["Unknown"] * len(boxes) if boxes else []
+        
+        try:
+            # Convert boxes to face_recognition format (top, right, bottom, left)
+            face_locations = []
+            for box in boxes:
+                if len(box) >= 4:
+                    x1, y1, x2, y2 = map(int, box[:4])
+                    # face_recognition uses (top, right, bottom, left)
+                    face_locations.append((y1, x2, y2, x1))
+            
+            if len(face_locations) == 0:
+                return []
+            
+            # Extract face encodings from the frame
+            # face_recognition expects RGB format (which picamera2 provides)
+            face_encodings = face_recognition.face_encodings(frame, face_locations)
+            
+            # Match each face encoding with known faces
+            names = []
+            for face_encoding in face_encodings:
+                # Compare with known faces
+                matches = face_recognition.compare_faces(
+                    self.known_face_encodings, 
+                    face_encoding, 
+                    tolerance=self.config.RECOGNITION_TOLERANCE
+                )
+                
+                # Find the best match
+                name = "Unknown"
+                if True in matches:
+                    # Get the distances to all known faces
+                    face_distances = face_recognition.face_distance(
+                        self.known_face_encodings, 
+                        face_encoding
+                    )
+                    # Get the index of the best match
+                    best_match_index = np.argmin(face_distances)
+                    if matches[best_match_index]:
+                        name = self.known_face_names[best_match_index]
+                
+                names.append(name)
+            
+            return names
+            
+        except Exception as e:
+            print(f"⚠️ Error in face recognition: {e}")
+            return ["Unknown"] * len(boxes) if boxes else []
+    
+    def draw_detections(self, frame, boxes, scores, names=None):
         """
         Draw bounding boxes and labels on the frame using PIL
         
@@ -413,6 +551,12 @@ class RaspberryPiFaceDetector:
             except:
                 font = ImageFont.load_default()
         
+        # Ensure names list matches boxes length
+        if names is None:
+            names = ["Unknown"] * len(boxes)
+        elif len(names) != len(boxes):
+            names = names[:len(boxes)] + ["Unknown"] * (len(boxes) - len(names))
+        
         for i, (box, score) in enumerate(zip(boxes, scores)):
             try:
                 # Ensure box is a list/array with 4 elements
@@ -426,11 +570,19 @@ class RaspberryPiFaceDetector:
                 else:
                     score = float(score)
                 
-                # Draw bounding box
-                draw.rectangle([x1, y1, x2, y2], outline=self.config.BOX_COLOR, width=2)
+                # Get name for this face
+                name = names[i] if i < len(names) else "Unknown"
                 
-                # Draw confidence score
-                label = f"Face: {score:.2f}"
+                # Choose color based on recognition
+                if name != "Unknown" and self.face_recognition_enabled:
+                    box_color = self.config.RECOGNIZED_COLOR
+                    label = f"{name} ({score:.2f})"
+                else:
+                    box_color = self.config.UNKNOWN_COLOR if self.face_recognition_enabled else self.config.BOX_COLOR
+                    label = f"{name}: {score:.2f}" if self.face_recognition_enabled else f"Face: {score:.2f}"
+                
+                # Draw bounding box
+                draw.rectangle([x1, y1, x2, y2], outline=box_color, width=2)
                 
                 # Get text size for background
                 bbox = draw.textbbox((0, 0), label, font=font)
@@ -439,7 +591,7 @@ class RaspberryPiFaceDetector:
                 
                 # Draw background rectangle for text
                 draw.rectangle([x1, y1 - text_height - 4, x1 + text_width + 4, y1], 
-                              fill=self.config.BOX_COLOR)
+                              fill=box_color)
                 
                 # Draw text
                 draw.text((x1 + 2, y1 - text_height - 2), label, fill=(0, 0, 0), font=font)
@@ -539,10 +691,16 @@ class RaspberryPiFaceDetector:
                 # Perform face detection
                 start_time = time.time()
                 boxes, scores = self.detect_faces(frame)
+                
+                # Recognize faces if enabled (this adds some processing time)
+                names = []
+                if self.face_recognition_enabled and len(boxes) > 0:
+                    names = self.recognize_faces(frame, boxes)
+                
                 processing_time = time.time() - start_time
                 
-                # Put result in queue
-                self.result_queue.put((frame, boxes, scores, processing_time, frame_id))
+                # Put result in queue (including names)
+                self.result_queue.put((frame, boxes, scores, names, processing_time, frame_id))
                 
             except queue.Empty:
                 continue
@@ -551,9 +709,13 @@ class RaspberryPiFaceDetector:
     
     def run(self):
         """Main detection loop"""
-        print("🎬 Starting face detection...")
+        print("🎬 Starting face detection and recognition...")
         print("📋 System Information:")
         print("   - Camera: Raspberry Pi Camera Module (picamera2)")
+        if self.face_recognition_enabled:
+            print(f"   - Face Recognition: Enabled ({len(self.known_face_names)} encoding(s) loaded)")
+        else:
+            print("   - Face Recognition: Disabled")
         if self.display_enabled:
             print("   - Display: Window + Console output")
             print("   - Close window or Press Ctrl+C to quit")
@@ -608,7 +770,7 @@ class RaspberryPiFaceDetector:
                         
                         # Get results from result queue
                         try:
-                            processed_frame, boxes, scores, processing_time, frame_id = self.result_queue.get_nowait()
+                            processed_frame, boxes, scores, names, processing_time, frame_id = self.result_queue.get_nowait()
                             # Convert to lists if numpy arrays
                             if isinstance(boxes, np.ndarray):
                                 self.last_boxes = boxes.tolist()
@@ -618,6 +780,7 @@ class RaspberryPiFaceDetector:
                                 self.last_scores = scores.tolist()
                             else:
                                 self.last_scores = list(scores) if scores else []
+                            self.last_names = names if names else []
                             self.last_detection_time = time.time()
                             self.processing_times.append(processing_time)
                             
@@ -625,18 +788,25 @@ class RaspberryPiFaceDetector:
                             if len(self.processing_times) > 30:
                                 self.processing_times.pop(0)
                             
-                            # Draw detections
-                            frame = self.draw_detections(frame, boxes, scores)
+                            # Draw detections with names
+                            frame = self.draw_detections(frame, boxes, scores, self.last_names)
                         except queue.Empty:
                             # Use cached results if no new results available
                             if time.time() - self.last_detection_time < 0.5:  # Use cache for 0.5 seconds
                                 cached_scores = self.last_scores if len(self.last_scores) == len(self.last_boxes) else [0.9] * len(self.last_boxes)
-                                frame = self.draw_detections(frame, self.last_boxes, cached_scores)
+                                cached_names = self.last_names if len(self.last_names) == len(self.last_boxes) else ["Unknown"] * len(self.last_boxes)
+                                frame = self.draw_detections(frame, self.last_boxes, cached_scores, cached_names)
                     else:
                         # Synchronous processing
                         if should_process:
                             start_time = time.time()
                             boxes, scores = self.detect_faces(frame)
+                            
+                            # Recognize faces if enabled
+                            names = []
+                            if self.face_recognition_enabled and len(boxes) > 0:
+                                names = self.recognize_faces(frame, boxes)
+                            
                             processing_time = time.time() - start_time
                             # Convert to lists if numpy arrays
                             if isinstance(boxes, np.ndarray):
@@ -647,6 +817,7 @@ class RaspberryPiFaceDetector:
                                 self.last_scores = scores.tolist()
                             else:
                                 self.last_scores = list(scores) if scores else []
+                            self.last_names = names if names else []
                             self.last_detection_time = time.time()
                             self.processing_times.append(processing_time)
                             
@@ -654,8 +825,8 @@ class RaspberryPiFaceDetector:
                             if len(self.processing_times) > 30:
                                 self.processing_times.pop(0)
                             
-                            # Draw detections
-                            frame = self.draw_detections(frame, boxes, scores)
+                            # Draw detections with names
+                            frame = self.draw_detections(frame, boxes, scores, self.last_names)
                 
                 # Calculate FPS
                 self.calculate_fps()
@@ -680,9 +851,17 @@ class RaspberryPiFaceDetector:
                         except (ValueError, TypeError):
                             scores_str = ['N/A'] * num_faces
                         
-                        print(f"Frame {self.frame_count}: {num_faces} face(s) detected | "
-                              f"FPS: {self.current_fps:.1f} | "
-                              f"Confidence: {scores_str}")
+                        # Format names if recognition is enabled
+                        if self.face_recognition_enabled and len(self.last_names) > 0:
+                            names_str = ", ".join(self.last_names)
+                            print(f"Frame {self.frame_count}: {num_faces} face(s) detected | "
+                                  f"FPS: {self.current_fps:.1f} | "
+                                  f"Names: {names_str} | "
+                                  f"Confidence: {scores_str}")
+                        else:
+                            print(f"Frame {self.frame_count}: {num_faces} face(s) detected | "
+                                  f"FPS: {self.current_fps:.1f} | "
+                                  f"Confidence: {scores_str}")
                 
                 # Add pause indicator
                 if paused:

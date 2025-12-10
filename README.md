@@ -1,7 +1,15 @@
-# Raspberry Pi 5 Face Detection System (Picamera2 Only)
+# Raspberry Pi 5 Face Detection & Recognition System (Picamera2 Only)
 
-A real-time face detection system optimized for Raspberry Pi 5 using YOLOv12n-face.pt model.
+A real-time face detection and recognition system optimized for Raspberry Pi 5 using YOLOv12n-face.pt model.
 **This version uses picamera2 ONLY - no OpenCV required. Designed specifically for Raspberry Pi Camera Module.**
+
+## 🆕 New: Facial Recognition!
+
+The system now includes **facial recognition** capabilities! You can:
+- Enroll faces of known people
+- Recognize faces in real-time
+- See names displayed on detected faces
+- Manage a database of known faces
 
 ## ⚡ Quick Start (3 Steps)
 
@@ -32,7 +40,9 @@ A real-time face detection system optimized for Raspberry Pi 5 using YOLOv12n-fa
 ## 🚀 Features
 
 - **Real-time face detection** with live camera feed
-- **Display window** showing video feed with detections (tkinter-based)
+- **Facial recognition** - recognize known faces and display names
+- **Face enrollment** - easily add new faces to the recognition database
+- **Display window** showing video feed with detections and names (tkinter-based)
 - **Optimized for Raspberry Pi 5** performance
 - **Configurable detection parameters** (confidence threshold, resize factor, etc.)
 - **Performance monitoring** with FPS tracking and processing statistics
@@ -55,6 +65,11 @@ A real-time face detection system optimized for Raspberry Pi 5 using YOLOv12n-fa
 - Camera enabled in raspi-config
 - **picamera2 library** (installed automatically)
 - **tkinter** and **python3-pil.imagetk** (installed automatically by setup script, required for display window)
+- **face_recognition library** (installed automatically, optional for facial recognition features)
+  - Requires dlib (can take 10-30 minutes to build on Raspberry Pi)
+  - System packages recommended: `libdlib-dev cmake libopenblas-dev liblapack-dev`
+- **imageio and imageio-ffmpeg** (installed automatically, for video-based enrollment)
+  - Requires ffmpeg: `sudo apt install -y ffmpeg`
 
 ## 🛠️ Installation
 
@@ -187,6 +202,101 @@ python3 raspberry_pi_face_detection.py --no-parallel
 # Disable console output (for headless operation)
 python3 raspberry_pi_face_detection.py --no-console
 ```
+
+## 👤 Facial Recognition
+
+### Enrolling Faces from Video
+
+Before the system can recognize faces, you need to enroll them into the database using a video file:
+
+```bash
+# Basic enrollment (processes up to 30 frames from video)
+python3 enroll_face.py --name "John Doe" --video "face_video.mp4"
+
+# Process more frames for better accuracy
+python3 enroll_face.py --name "Jane Smith" --video "video.mp4" --max-frames 50
+
+# Process every frame (slower but more thorough)
+python3 enroll_face.py --name "Bob" --video "video.mp4" --frame-skip 1
+```
+
+**Video Requirements:**
+- **Supported formats**: MP4, AVI, MOV, MKV, etc. (any format supported by ffmpeg)
+- **Content**: Video of face rotating slowly (10-30 seconds recommended)
+- **Lighting**: Face should be clearly visible and well-lit
+- **Position**: Face should be centered and clearly visible throughout the video
+- **Rotation**: Slowly rotate your head left/right and up/down to capture multiple angles
+
+**Tips for best results:**
+- Record in good lighting conditions
+- Keep face centered in frame
+- Rotate slowly (about 2-3 seconds per rotation)
+- Avoid rapid movements
+- Ensure face is not partially obscured
+
+### Managing the Face Database
+
+```bash
+# List all enrolled faces
+python3 enroll_face.py --list
+
+# Delete a face from the database
+python3 enroll_face.py --delete "John Doe"
+```
+
+### How Recognition Works
+
+1. **Face Detection**: YOLO detects faces in the frame
+2. **Face Encoding**: Each detected face is encoded into a 128-dimensional vector
+3. **Face Matching**: Encodings are compared with known faces in the database
+4. **Display**: Recognized faces show names in green, unknown faces show "Unknown" in orange
+
+### Recognition Settings
+
+You can adjust recognition sensitivity in `raspberry_pi_face_detection.py`:
+
+```python
+class Config:
+    RECOGNITION_TOLERANCE = 0.6  # Lower = more strict (0.4-0.6 recommended)
+    ENABLE_FACE_RECOGNITION = True  # Set to False to disable recognition
+```
+
+**Tolerance values:**
+- `0.4`: Very strict (fewer false positives, may miss some matches)
+- `0.6`: Balanced (recommended)
+- `0.7`: More lenient (more matches, but may have false positives)
+
+### Face Database
+
+- Stored in `known_faces.json` (JSON format)
+- Each person can have multiple encodings (captured from different angles/lighting)
+- More encodings per person = better recognition accuracy
+- Database is automatically loaded when the system starts
+
+### Troubleshooting Recognition
+
+**Problem: Faces not being recognized**
+- Make sure faces are enrolled: `python3 enroll_face.py --list`
+- Check lighting conditions (good lighting improves accuracy)
+- Try processing more frames: `python3 enroll_face.py --name "Name" --video "video.mp4" --max-frames 50`
+- Ensure video has good face coverage (multiple angles)
+- Adjust tolerance: Lower values = more strict matching
+
+**Problem: Video processing fails**
+- Check video format is supported (MP4, AVI, MOV, etc.)
+- Install ffmpeg: `sudo apt install -y ffmpeg`
+- Install imageio: `python3 -m pip install --break-system-packages imageio imageio-ffmpeg`
+- Try a different video format or re-encode the video
+
+**Problem: Wrong person recognized**
+- Lower the tolerance value in Config
+- Re-enroll faces with better lighting/angles
+- Ensure face is clearly visible and not partially obscured
+
+**Problem: face_recognition library not installed**
+- Install dependencies: `sudo apt install -y libdlib-dev cmake libopenblas-dev liblapack-dev`
+- Install library: `python3 -m pip install --break-system-packages face_recognition`
+- Note: Building dlib can take 10-30 minutes on Raspberry Pi
 
 ## 🎮 Controls
 

@@ -1,5 +1,5 @@
-# Raspberry Pi 5 Face Detection System Requirements (Picamera2 Only)
-# ===================================================================
+# Raspberry Pi 5 Face Detection & Recognition System Requirements (Picamera2 Only)
+# ================================================================================
 
 # Core dependencies for face detection
 ultralytics>=8.0.0
@@ -13,7 +13,16 @@ picamera2>=0.3.12
 # Image processing and drawing (replaces OpenCV)
 Pillow>=10.0.0
 
-# Note: pathlib and argparse are built-in Python modules (Python 3.4+)
+# Face recognition library (for facial recognition features)
+# Note: This requires dlib which can take a while to build on Raspberry Pi
+# Consider installing dlib system package first: sudo apt install -y libdlib-dev
+face_recognition>=1.3.0
+
+# Video processing for enrollment (lightweight)
+imageio>=2.31.0
+imageio-ffmpeg>=0.4.9
+
+# Note: pathlib, argparse, and json are built-in Python modules (Python 3.4+)
 # No need to install them separately
 
 # Note: This system uses picamera2 ONLY - no OpenCV required

@@ -81,6 +81,16 @@ if [ "$LIBCAP_INSTALLED" = false ]; then
     echo ""
 fi
 
+# Try to install dlib dependencies (for face_recognition)
+echo "🔧 Installing dlib dependencies (for face recognition)..."
+for pkg in libdlib-dev cmake libopenblas-dev liblapack-dev; do
+    if sudo apt install -y "$pkg" 2>/dev/null; then
+        echo "✅ Installed: $pkg"
+    else
+        echo "⚠️  Package not available: $pkg (may need to build dlib from source)"
+    fi
+done
+
 # Try to install other optional packages
 for pkg in libopencv-dev libatlas-base-dev libhdf5-dev libhdf5-serial-dev; do
     if sudo apt install -y "$pkg" 2>/dev/null; then
@@ -172,6 +182,50 @@ else
     echo "   Full error log saved to: /tmp/picamera2_install.log"
     PICAMERA2_INSTALLED=false
     exit 1  # Exit on failure since picamera2 is required
+fi
+set -e  # Re-enable exit on error
+
+# Install face_recognition (for facial recognition features)
+echo "   Installing face_recognition (this may take a while - requires dlib)..."
+echo "   Note: face_recognition requires dlib, which can take 10-30 minutes to build on Raspberry Pi"
+set +e  # Don't exit on error for face_recognition (it's optional)
+if python3 -m pip install --no-cache-dir --break-system-packages --no-warn-script-location face_recognition 2>&1 | tee /tmp/face_recognition_install.log; then
+    echo "✅ face_recognition installed successfully"
+    FACE_RECOGNITION_INSTALLED=true
+else
+    echo ""
+    echo "⚠️  face_recognition installation failed or is taking too long"
+    echo ""
+    if grep -q "dlib" /tmp/face_recognition_install.log 2>/dev/null; then
+        echo "   Error: dlib build failed or taking too long"
+        echo ""
+        echo "   SOLUTION: Install dlib system package first:"
+        echo "   sudo apt install -y libdlib-dev"
+        echo "   Then try: python3 -m pip install --break-system-packages face_recognition"
+        echo ""
+        echo "   Or build dlib from source (takes 10-30 minutes):"
+        echo "   sudo apt install -y cmake libopenblas-dev liblapack-dev"
+        echo "   python3 -m pip install --break-system-packages dlib"
+        echo "   python3 -m pip install --break-system-packages face_recognition"
+    fi
+    echo "   Full error log saved to: /tmp/face_recognition_install.log"
+    echo "   ⚠️  Face recognition features will be disabled until face_recognition is installed"
+    FACE_RECOGNITION_INSTALLED=false
+fi
+set -e  # Re-enable exit on error
+
+# Install imageio and imageio-ffmpeg (for video processing in enrollment)
+echo "   Installing imageio and imageio-ffmpeg (for video processing)..."
+set +e  # Don't exit on error for imageio (it's optional)
+if python3 -m pip install --no-cache-dir --break-system-packages --no-warn-script-location imageio imageio-ffmpeg 2>&1 | tee /tmp/imageio_install.log; then
+    echo "✅ imageio installed successfully"
+    IMAGEIO_INSTALLED=true
+else
+    echo ""
+    echo "⚠️  imageio installation failed"
+    echo "   Video-based enrollment will not work until imageio is installed"
+    echo "   Try manually: python3 -m pip install --break-system-packages imageio imageio-ffmpeg"
+    IMAGEIO_INSTALLED=false
 fi
 set -e  # Re-enable exit on error
 
