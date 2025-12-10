@@ -123,6 +123,10 @@ class Config:
     API_FRAME_BASE_URL = None  # e.g., "http://raspberrypi.local:8000/frames"
     CAMERA_ID = "raspberry_pi_camera"  # Camera identifier for events
     
+    # Unknown person alert settings
+    ENABLE_UNKNOWN_PERSON_ALERTS = True  # Set to True to enable unknown person alerts
+    UNKNOWN_PERSON_ALERT_COOLDOWN = 30  # Seconds between alerts for same unknown person (prevents spam)
+    
     # Colors (RGB format for PIL)
     BOX_COLOR = (0, 255, 0)  # Green for detected faces
     RECOGNIZED_COLOR = (0, 255, 0)  # Green for recognized faces
@@ -184,6 +188,9 @@ class RaspberryPiFaceDetector:
         self.n8n_client = None
         self.api_frame_storage = None
         self.create_detection_event = None
+        
+        # Unknown person alert tracking
+        self.last_unknown_alert_time = {}  # Track last alert time per unknown face (by bbox hash)
         
         print("🚀 Initializing Raspberry Pi 5 Face Detection & Recognition System (Picamera2 Only)...")
         self.initialize_model()
@@ -398,6 +405,107 @@ class RaspberryPiFaceDetector:
         
         except Exception as e:
             print(f"⚠️  Error sending detection event: {e}")
+    
+    def send_unknown_person_alert(self, boxes, scores, frame):
+        """
+        Send alert for unknown person detection with captured image
+        
+        Args:
+            boxes: List of bounding boxes for unknown faces
+            scores: List of confidence scores
+            frame: Frame numpy array with the unknown person
+        """
+        if not self.config.ENABLE_UNKNOWN_PERSON_ALERTS:
+            return
+        
+        if not self.n8n_client or len(boxes) == 0 or not self.create_detection_event:
+            return
+        
+        try:
+            import hashlib
+            
+            # Filter for unknown faces only and check cooldown
+            unknown_detections = []
+            unknown_boxes = []
+            unknown_scores = []
+            current_time = time.time()
+            
+            for i, (box, score) in enumerate(zip(boxes, scores)):
+                # Check if this is an unknown face (name would be "Unknown" or None)
+                # We'll check this by seeing if recognition is enabled and face wasn't recognized
+                # For now, we'll send alert for all faces if recognition is disabled
+                # or if we detect unknown faces
+                
+                # Create a hash of the bbox for cooldown tracking
+                bbox_str = f"{box[0]:.1f},{box[1]:.1f},{box[2]:.1f},{box[3]:.1f}"
+                bbox_hash = hashlib.md5(bbox_str.encode()).hexdigest()
+                
+                # Check cooldown
+                if bbox_hash in self.last_unknown_alert_time:
+                    time_since_last = current_time - self.last_unknown_alert_time[bbox_hash]
+                    if time_since_last < self.config.UNKNOWN_PERSON_ALERT_COOLDOWN:
+                        continue  # Skip this detection (still in cooldown)
+                
+                # Add to unknown detections
+                unknown_boxes.append(box)
+                unknown_scores.append(score)
+                unknown_detections.append({
+                    "label": "unknown_person",
+                    "confidence": float(score),
+                    "bbox": [float(x) for x in box[:4]] if len(box) >= 4 else [0, 0, 0, 0],
+                    "name": None
+                })
+                
+                # Update last alert time
+                self.last_unknown_alert_time[bbox_hash] = current_time
+            
+            # Only send alert if we have unknown detections
+            if len(unknown_detections) == 0:
+                return
+            
+            # Crop the frame to show the unknown person(s) more clearly
+            # Get bounding box that encompasses all unknown faces
+            if len(unknown_boxes) > 0:
+                min_x = min(box[0] for box in unknown_boxes)
+                min_y = min(box[1] for box in unknown_boxes)
+                max_x = max(box[2] for box in unknown_boxes)
+                max_y = max(box[3] for box in unknown_boxes)
+                
+                # Add padding
+                padding = 20
+                h, w = frame.shape[:2]
+                crop_x1 = max(0, int(min_x) - padding)
+                crop_y1 = max(0, int(min_y) - padding)
+                crop_x2 = min(w, int(max_x) + padding)
+                crop_y2 = min(h, int(max_y) + padding)
+                
+                # Crop frame
+                cropped_frame = frame[crop_y1:crop_y2, crop_x1:crop_x2]
+            else:
+                cropped_frame = frame
+            
+            # Create alert event
+            event = self.create_detection_event(
+                camera_id=self.config.CAMERA_ID,
+                event_type="unknown_person_detected",
+                detections=unknown_detections,
+                frame=cropped_frame,  # Send cropped frame focusing on unknown person
+                metadata={
+                    "frame_count": self.frame_count,
+                    "fps": self.current_fps,
+                    "alert_type": "unknown_person",
+                    "count": len(unknown_detections),
+                    "cooldown_seconds": self.config.UNKNOWN_PERSON_ALERT_COOLDOWN
+                }
+            )
+            
+            # Send to n8n
+            self.n8n_client.send_event(event, async_send=True)
+            
+            print(f"🚨 Unknown person alert sent: {len(unknown_detections)} unknown face(s) detected")
+        
+        except Exception as e:
+            print(f"⚠️  Error sending unknown person alert: {e}")
     
     def initialize_display(self):
         """Initialize tkinter display window"""
@@ -901,6 +1009,19 @@ class RaspberryPiFaceDetector:
                             # Send detection event to n8n if enabled
                             if self.n8n_client and len(boxes) > 0:
                                 self.send_detection_event(boxes, scores, self.last_names, frame)
+                                
+                                # Check for unknown persons and send alert
+                                if self.config.ENABLE_UNKNOWN_PERSON_ALERTS:
+                                    # Filter for unknown faces
+                                    unknown_boxes = []
+                                    unknown_scores = []
+                                    for i, name in enumerate(self.last_names):
+                                        if name == "Unknown" or name is None:
+                                            unknown_boxes.append(boxes[i])
+                                            unknown_scores.append(scores[i])
+                                    
+                                    if len(unknown_boxes) > 0:
+                                        self.send_unknown_person_alert(unknown_boxes, unknown_scores, frame)
                         except queue.Empty:
                             # Use cached results if no new results available
                             if time.time() - self.last_detection_time < 0.5:  # Use cache for 0.5 seconds
@@ -942,6 +1063,19 @@ class RaspberryPiFaceDetector:
                             # Send detection event to n8n if enabled
                             if self.n8n_client and len(boxes) > 0:
                                 self.send_detection_event(boxes, scores, self.last_names, frame)
+                                
+                                # Check for unknown persons and send alert
+                                if self.config.ENABLE_UNKNOWN_PERSON_ALERTS:
+                                    # Filter for unknown faces
+                                    unknown_boxes = []
+                                    unknown_scores = []
+                                    for i, name in enumerate(self.last_names):
+                                        if name == "Unknown" or name is None:
+                                            unknown_boxes.append(boxes[i])
+                                            unknown_scores.append(scores[i])
+                                    
+                                    if len(unknown_boxes) > 0:
+                                        self.send_unknown_person_alert(unknown_boxes, unknown_scores, frame)
                 
                 # Calculate FPS
                 self.calculate_fps()

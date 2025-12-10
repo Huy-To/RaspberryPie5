@@ -358,6 +358,85 @@ if FASTAPI_AVAILABLE:
             "webhook_url": webhook_client.webhook_url if webhook_client else None
         }
     
+    @app.post("/unknown-person-alert", response_model=Dict[str, Any])
+    async def unknown_person_alert(
+        camera_id: str = Form(...),
+        bbox: str = Form(...),  # JSON string: [x1, y1, x2, y2]
+        confidence: float = Form(...),
+        frame: UploadFile = File(...),
+        metadata: Optional[str] = Form(None)  # JSON string
+    ):
+        """
+        Send alert for unknown person detection with captured image
+        
+        This endpoint accepts an image of an unknown person and sends an alert to n8n.
+        Can be called directly from external systems or used as a webhook target.
+        """
+        try:
+            # Parse bbox
+            try:
+                bbox_list = json.loads(bbox)
+                if not isinstance(bbox_list, list) or len(bbox_list) != 4:
+                    raise ValueError("bbox must be a list of 4 numbers")
+            except (json.JSONDecodeError, ValueError) as e:
+                raise HTTPException(status_code=400, detail=f"Invalid bbox format: {e}")
+            
+            # Parse metadata if provided
+            metadata_dict = {}
+            if metadata:
+                try:
+                    metadata_dict = json.loads(metadata)
+                except json.JSONDecodeError:
+                    pass
+            
+            # Read and save frame
+            frame_data = await frame.read()
+            frame_url = None
+            
+            if frame_storage:
+                # Generate filename with timestamp
+                timestamp = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
+                filename = f"unknown_person_{timestamp}.jpg"
+                _, frame_url = frame_storage.save_frame(frame_data, filename=filename)
+            
+            # Create detection event
+            detection_event = {
+                "camera_id": camera_id,
+                "event_type": "unknown_person_detected",
+                "timestamp": datetime.now().isoformat(),
+                "detections": [
+                    {
+                        "label": "unknown_person",
+                        "confidence": float(confidence),
+                        "bbox": [float(x) for x in bbox_list],
+                        "name": None
+                    }
+                ],
+                "frame_url": frame_url,
+                "frame_base64": None,
+                "clip_url": None,
+                "metadata": {
+                    **metadata_dict,
+                    "alert_source": "api_endpoint",
+                    "alert_type": "unknown_person"
+                }
+            }
+            
+            # Send to n8n webhook
+            if webhook_client:
+                webhook_client.send_event(detection_event, async_send=True)
+            
+            return {
+                "status": "success",
+                "message": "Unknown person alert sent",
+                "event_type": "unknown_person_detected",
+                "frame_url": frame_url,
+                "timestamp": detection_event["timestamp"]
+            }
+        
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"Error processing unknown person alert: {str(e)}")
+    
     @app.get("/")
     async def root():
         """Root endpoint with API information"""
@@ -367,6 +446,7 @@ if FASTAPI_AVAILABLE:
             "endpoints": {
                 "POST /event": "Receive detection events",
                 "POST /training-clip": "Receive training clip metadata",
+                "POST /unknown-person-alert": "Send unknown person alert with image",
                 "GET /health": "Health check",
                 "GET /": "API information"
             }

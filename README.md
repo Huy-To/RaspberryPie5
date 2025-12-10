@@ -300,6 +300,8 @@ class Config:
 
 ## 🔌 n8n Integration API
 
+For complete API documentation, see **[API_REFERENCE.md](API_REFERENCE.md)** - comprehensive list of all available endpoints for n8n.
+
 The system includes a FastAPI server for sending detection events to n8n workflows.
 
 ### Configuration
@@ -312,6 +314,10 @@ class Config:
     ENABLE_N8N_INTEGRATION = True
     N8N_WEBHOOK_URL = "http://n8n.local:5678/webhook/abc123"  # Your n8n webhook URL
     
+    # Unknown person alert settings
+    ENABLE_UNKNOWN_PERSON_ALERTS = True  # Enable automatic unknown person alerts
+    UNKNOWN_PERSON_ALERT_COOLDOWN = 30  # Seconds between alerts (prevents spam)
+    
     # Optional: Start FastAPI server
     API_SERVER_ENABLED = True
     API_SERVER_HOST = "0.0.0.0"
@@ -319,6 +325,49 @@ class Config:
     API_FRAME_STORAGE_DIR = "frames"
     API_FRAME_BASE_URL = "http://raspberrypi.local:8000/frames"  # Optional
     CAMERA_ID = "raspberry_pi_camera"
+```
+
+### Unknown Person Detection & Alerts
+
+The system can automatically detect unknown persons and send alerts with captured images to n8n:
+
+**Features:**
+- ✅ Automatic detection of unknown faces (not in recognition database)
+- ✅ Captures and sends image of unknown person
+- ✅ Cooldown period to prevent alert spam
+- ✅ Crops image to focus on unknown person
+- ✅ Sends `unknown_person_detected` event to n8n webhook
+
+**How it works:**
+1. System detects faces using YOLO
+2. Attempts to recognize faces using face recognition database
+3. If face is not recognized (name = "Unknown"), triggers alert
+4. Captures frame with unknown person
+5. Sends alert event to n8n with image URL
+
+**Alert Event Schema:**
+```json
+{
+  "camera_id": "raspberry_pi_camera",
+  "event_type": "unknown_person_detected",
+  "timestamp": "2024-01-15T10:30:45.123456",
+  "detections": [
+    {
+      "label": "unknown_person",
+      "confidence": 0.95,
+      "bbox": [100, 150, 200, 250],
+      "name": null
+    }
+  ],
+  "frame_url": "http://raspberrypi.local:8000/frames/unknown_person_20240115_103045.jpg",
+  "metadata": {
+    "frame_count": 1234,
+    "fps": 15.5,
+    "alert_type": "unknown_person",
+    "count": 1,
+    "cooldown_seconds": 30
+  }
+}
 ```
 
 ### Event Schema

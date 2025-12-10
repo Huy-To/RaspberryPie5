@@ -38,6 +38,9 @@ python3 api_server.py --webhook-url "http://n8n.local:5678/webhook/your-id" --ho
 - **POST /event**  
   Receives detection events. Payload matches the schema below. Forwards to n8n if webhook configured.
 
+- **POST /unknown-person-alert**  
+  Sends alert for unknown person detection with captured image. Form fields: `camera_id`, `bbox` (JSON string), `confidence`, `frame` (file), optional `metadata` (JSON). Automatically sends `unknown_person_detected` event to n8n.
+
 - **POST /training-clip**  
   Form fields: `clip_path`, `camera_id`, optional `clip_url`, `duration`, `frame_count`, `metadata` (JSON), optional `frame_preview` (UploadFile). Forwards as `training_clip_ready`.
 
@@ -48,6 +51,8 @@ python3 api_server.py --webhook-url "http://n8n.local:5678/webhook/your-id" --ho
   API info and endpoint listing.
 
 ## Event Schema (sent to n8n)
+
+### Face Detected Event
 ```json
 {
   "camera_id": "raspberry_pi_camera",
@@ -66,6 +71,32 @@ python3 api_server.py --webhook-url "http://n8n.local:5678/webhook/your-id" --ho
   "metadata": {
     "frame_count": 1234,
     "fps": 15.5
+  }
+}
+```
+
+### Unknown Person Detected Event
+```json
+{
+  "camera_id": "raspberry_pi_camera",
+  "event_type": "unknown_person_detected",
+  "timestamp": "2024-01-15T10:30:45.123456",
+  "detections": [
+    {
+      "label": "unknown_person",
+      "confidence": 0.95,
+      "bbox": [100, 150, 200, 250],
+      "name": null
+    }
+  ],
+  "frame_url": "http://raspberrypi.local:8000/frames/unknown_person_20240115_103045.jpg",
+  "clip_url": null,
+  "metadata": {
+    "frame_count": 1234,
+    "fps": 15.5,
+    "alert_type": "unknown_person",
+    "count": 1,
+    "cooldown_seconds": 30
   }
 }
 ```
@@ -97,11 +128,38 @@ curl -X POST http://raspberrypi.local:8000/event \
   }'
 ```
 
+## Unknown Person Detection
+
+The system automatically detects unknown persons (faces not in the recognition database) and sends alerts:
+
+**Automatic Detection:**
+- When face recognition is enabled and a face is not recognized, an `unknown_person_detected` event is sent
+- The system captures an image of the unknown person and includes it in the alert
+- Cooldown period prevents spam (default: 30 seconds)
+
+**Configuration:**
+```python
+class Config:
+    ENABLE_UNKNOWN_PERSON_ALERTS = True  # Enable automatic alerts
+    UNKNOWN_PERSON_ALERT_COOLDOWN = 30  # Seconds between alerts
+```
+
+**Manual Alert via API:**
+You can also send unknown person alerts manually using the `/unknown-person-alert` endpoint:
+```bash
+curl -X POST http://raspberrypi.local:8000/unknown-person-alert \
+  -F "camera_id=raspberry_pi_camera" \
+  -F "bbox=[100,150,200,250]" \
+  -F "confidence=0.95" \
+  -F "frame=@unknown_person.jpg"
+```
+
 ## n8n Setup Steps
 1) Add a **Webhook** node in n8n, copy its URL.
 2) Set that URL in `N8N_WEBHOOK_URL` (Config) or pass `--webhook-url` to `api_server.py`.
 3) Deploy the workflow; ensure the webhook is reachable from the Pi.
 4) Run detection; verify events appear in n8n execution logs.
+5) For unknown person alerts, ensure `ENABLE_UNKNOWN_PERSON_ALERTS = True` in Config.
 
 ## Notes for Raspberry Pi 5
 - Use `API_FRAME_BASE_URL` pointing to the Pi’s reachable hostname/IP and port if you want n8n to fetch frames.
