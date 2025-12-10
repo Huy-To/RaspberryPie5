@@ -107,6 +107,325 @@ URL: http://raspberrypi.local:8000/health
 
 ---
 
+## POST /command - n8n Command Handler
+
+**Description:** Handle commands from n8n. This endpoint allows n8n to send commands to the system and receive responses. Use this for bidirectional communication between n8n and the detection system.
+
+**Method:** `POST`
+
+**URL:** `http://raspberrypi.local:8000/command`
+
+**Headers:**
+```
+Content-Type: application/json
+```
+
+**Query Parameters:** None
+
+**Request Body:** JSON object
+
+```json
+{
+  "command": "get_status",
+  "parameters": {}
+}
+```
+
+**Request Schema:**
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `command` | string | Yes | Command to execute (see supported commands below) |
+| `parameters` | object | No | Command-specific parameters (default: `{}`) |
+
+**Supported Commands:**
+
+### 1. `get_status`
+Get system status and information.
+
+**Request:**
+```json
+{
+  "command": "get_status",
+  "parameters": {}
+}
+```
+
+**Response:**
+```json
+{
+  "status": "success",
+  "command": "get_status",
+  "data": {
+    "system": {
+      "running": true,
+      "api_version": "1.0.0",
+      "webhook_enabled": true,
+      "webhook_url": "http://n8n.local:5678/webhook/abc123"
+    },
+    "face_recognition": {
+      "enabled": true,
+      "enrolled_faces": 5,
+      "database_path": "/path/to/known_faces.json"
+    },
+    "storage": {
+      "frames_stored": 42,
+      "frames_directory": "/path/to/frames"
+    },
+    "timestamp": "2024-01-15T14:30:45.123456"
+  }
+}
+```
+
+### 2. `get_recent_detections`
+Get recent detection events.
+
+**Request:**
+```json
+{
+  "command": "get_recent_detections",
+  "parameters": {
+    "limit": 10,
+    "event_type": "verified_person"
+  }
+}
+```
+
+**Parameters:**
+- `limit` (integer, optional): Number of detections to return (default: 10)
+- `event_type` (string, optional): Filter by event type (`"verified_person"`, `"unknown_person"`, or `null` for all)
+
+**Response:**
+```json
+{
+  "status": "success",
+  "command": "get_recent_detections",
+  "data": {
+    "detections": [
+      {
+        "type": "verified_person",
+        "person_name": "John Doe",
+        "frame_filename": "verified_John_Doe_20240115_143045.jpg",
+        "frame_url": "http://raspberrypi.local:8000/frames/verified_John_Doe_20240115_143045.jpg",
+        "timestamp": "2024-01-15T14:30:45.123456"
+      }
+    ],
+    "count": 1,
+    "limit": 10,
+    "event_type_filter": "verified_person"
+  }
+}
+```
+
+### 3. `get_enrolled_faces`
+Get list of all enrolled faces.
+
+**Request:**
+```json
+{
+  "command": "get_enrolled_faces",
+  "parameters": {}
+}
+```
+
+**Response:**
+```json
+{
+  "status": "success",
+  "command": "get_enrolled_faces",
+  "data": {
+    "faces": [
+      {
+        "name": "John Doe",
+        "encoding_count": 15
+      },
+      {
+        "name": "Jane Smith",
+        "encoding_count": 12
+      }
+    ],
+    "total_count": 2
+  }
+}
+```
+
+### 4. `get_statistics`
+Get detection statistics.
+
+**Request:**
+```json
+{
+  "command": "get_statistics",
+  "parameters": {}
+}
+```
+
+**Response:**
+```json
+{
+  "status": "success",
+  "command": "get_statistics",
+  "data": {
+    "statistics": {
+      "total_detections": 150,
+      "verified_persons": 120,
+      "unknown_persons": 30,
+      "by_person": {
+        "John Doe": 45,
+        "Jane Smith": 35,
+        "Bob Johnson": 40
+      }
+    },
+    "timestamp": "2024-01-15T14:30:45.123456"
+  }
+}
+```
+
+### 5. `update_config`
+Update system configuration (limited parameters).
+
+**Request:**
+```json
+{
+  "command": "update_config",
+  "parameters": {
+    "camera_id": "front_door_camera",
+    "alert_cooldown": 60
+  }
+}
+```
+
+**Allowed Parameters:**
+- `camera_id` (string): Camera identifier
+- `alert_cooldown` (integer): Alert cooldown in seconds
+
+**Response:**
+```json
+{
+  "status": "success",
+  "command": "update_config",
+  "message": "Configuration update received",
+  "updates": {
+    "camera_id": "front_door_camera",
+    "alert_cooldown": 60
+  },
+  "note": "Configuration changes require system restart to take effect"
+}
+```
+
+### 6. `test_connection`
+Test API connection.
+
+**Request:**
+```json
+{
+  "command": "test_connection",
+  "parameters": {}
+}
+```
+
+**Response:**
+```json
+{
+  "status": "success",
+  "command": "test_connection",
+  "message": "API is responding",
+  "timestamp": "2024-01-15T14:30:45.123456",
+  "api_version": "1.0.0"
+}
+```
+
+**Error Response:** `400 Bad Request` (invalid command)
+
+```json
+{
+  "status": "error",
+  "message": "Unknown command: invalid_command",
+  "available_commands": [
+    "get_status",
+    "get_recent_detections",
+    "get_enrolled_faces",
+    "get_statistics",
+    "update_config",
+    "test_connection"
+  ]
+}
+```
+
+**n8n Usage:**
+
+### Use Case 1: Check System Status
+```
+HTTP Request Node:
+Method: POST
+URL: http://raspberrypi.local:8000/command
+Body (JSON):
+{
+  "command": "get_status",
+  "parameters": {}
+}
+```
+
+### Use Case 2: Get Recent Verified Person Detections
+```
+HTTP Request Node:
+Method: POST
+URL: http://raspberrypi.local:8000/command
+Body (JSON):
+{
+  "command": "get_recent_detections",
+  "parameters": {
+    "limit": 5,
+    "event_type": "verified_person"
+  }
+}
+```
+
+### Use Case 3: Monitor Detection Statistics
+```
+Schedule Trigger (every hour)
+  ↓
+HTTP Request → POST /command (get_statistics)
+  ↓
+IF Node → Check if unknown_persons > threshold
+  ↓
+Send Alert → Security team
+```
+
+### Use Case 4: Dashboard Workflow
+```
+Webhook (receives detection event)
+  ↓
+HTTP Request → POST /command (get_status)
+  ↓
+HTTP Request → POST /command (get_statistics)
+  ↓
+Set Node → Combine data
+  ↓
+Send to Dashboard → Display status
+```
+
+**Example n8n Workflow:**
+```
+Schedule Trigger (every 5 minutes)
+  ↓
+HTTP Request → POST /command
+  Body: {"command": "get_status"}
+  ↓
+IF Node → Check if system.running === false
+  ↓
+Branch A (Not Running):
+  - Send Email → "System is not running!"
+  - HTTP Request → Restart system (if API supports it)
+  ↓
+Branch B (Running):
+  - HTTP Request → POST /command
+    Body: {"command": "get_statistics"}
+  - Log to Database → Store statistics
+```
+
+---
+
 ## POST /event - Detection Event
 
 **Description:** Receives detection events and forwards them to n8n webhook (if configured). This endpoint is called internally by the detection system, but can also be called directly from n8n or other systems.
@@ -376,6 +695,7 @@ Process training clip
 | Event Type | Description | When Sent |
 |------------|-------------|-----------|
 | `face_detected` | Face detected in frame | Automatically when faces are detected |
+| `verified_person_detected` | Verified person detected (95%+ confidence) | Automatically when verified persons are detected (if enabled) |
 | `unknown_person_detected` | Unknown person detected | Automatically when unknown faces are detected (if enabled) |
 | `person_detected` | Person detected (if person detection enabled) | When persons are detected |
 | `training_clip_ready` | Training clip is ready for processing | When `/training-clip` endpoint is called |
@@ -404,7 +724,36 @@ Currently, the API does not require authentication. For production use, consider
 
 ## 📝 Complete n8n Workflow Examples
 
-### Example 1: Face Detection Alert System
+### Example 1: Verified Person Access Control
+
+```
+1. Webhook Node (receives verified_person_detected events)
+   ↓
+2. HTTP Request → Download frame from frame_url
+   ↓
+3. Set Node → Extract person information
+   - Name: {{ $json.metadata.person.name }}
+   - Date: {{ $json.metadata.person.date }}
+   - Time: {{ $json.metadata.person.time }}
+   - Confidence: {{ $json.detections[0].confidence }}
+   ↓
+4. Database Node → Log access entry
+   ↓
+5. IF Node → Check if person is authorized
+   ↓
+6. Branch A (Authorized):
+   - HTTP Request → Unlock door/gate
+   - Send Email → "Access granted: {{ $json.metadata.person.name }}"
+   - Send SMS → Notification to person
+   ↓
+7. Branch B (Not Authorized):
+   - Send Alert → Security team
+   - HTTP Request → Trigger alarm
+   ↓
+8. Save File → Store frame for records
+```
+
+### Example 2: Face Detection Alert System
 
 ```
 1. Webhook Node (receives face_detected events)
@@ -504,6 +853,19 @@ curl -X POST http://raspberrypi.local:8000/training-clip \
   -F "duration=10.0" \
   -F "frame_count=300" \
   -F "metadata={\"test\":true}"
+```
+
+### Test Verified Person Alert Endpoint
+```bash
+curl -X POST http://raspberrypi.local:8000/verified-person-alert \
+  -F "camera_id=test_camera" \
+  -F "person_name=John Doe" \
+  -F "bbox=[100,150,200,250]" \
+  -F "confidence=0.97" \
+  -F "frame=@verified_person.jpg" \
+  -F "date=2024-01-15" \
+  -F "time_str=14:30:45" \
+  -F "metadata={\"location\":\"front_door\",\"test\":true}"
 ```
 
 ### Test Unknown Person Alert Endpoint

@@ -44,7 +44,9 @@ except ImportError:
     sys.exit(1)
 
 # Configuration
-FACE_DATABASE_PATH = "known_faces.json"
+# Get base directory (parent of src/)
+BASE_DIR = Path(__file__).parent.parent
+FACE_DATABASE_PATH = str(BASE_DIR / "known_faces.json")
 DEFAULT_MAX_FRAMES = 30  # Maximum number of frames to process
 FRAME_SKIP = 5  # Process every Nth frame (for efficiency)
 MIN_FACE_SIZE = 80  # Minimum face size in pixels

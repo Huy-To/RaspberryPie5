@@ -35,8 +35,14 @@ python3 api_server.py --webhook-url "http://n8n.local:5678/webhook/your-id" --ho
 ```
 
 ## Endpoints
+- **POST /command**  
+  Handle commands from n8n. Accepts JSON with `command` and `parameters`. Supports: `get_status`, `get_recent_detections`, `get_enrolled_faces`, `get_statistics`, `update_config`, `test_connection`. Returns command-specific responses.
+
 - **POST /event**  
   Receives detection events. Payload matches the schema below. Forwards to n8n if webhook configured.
+
+- **POST /verified-person-alert**  
+  Sends alert for verified person detection (95%+ confidence) with captured image and person information. Form fields: `camera_id`, `person_name`, `bbox` (JSON string), `confidence` (>=0.95), `frame` (file), optional `date`, `time_str`, `metadata` (JSON). Automatically sends `verified_person_detected` event to n8n with name, date, time.
 
 - **POST /unknown-person-alert**  
   Sends alert for unknown person detection with captured image. Form fields: `camera_id`, `bbox` (JSON string), `confidence`, `frame` (file), optional `metadata` (JSON). Automatically sends `unknown_person_detected` event to n8n.

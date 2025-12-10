@@ -86,8 +86,11 @@ except ImportError as e:
 class Config:
     """Configuration class for the face detection system"""
     
+    # Get base directory (parent of src/)
+    BASE_DIR = Path(__file__).parent.parent
+    
     # Model settings
-    MODEL_PATH = "yolov12n-face.pt"
+    MODEL_PATH = str(BASE_DIR / "models" / "yolov12n-face.pt")
     CONFIDENCE_THRESHOLD = 0.5
     IOU_THRESHOLD = 0.45
     
@@ -109,7 +112,7 @@ class Config:
     PRINT_TO_CONSOLE = True  # Print detection info to console
     
     # Face recognition settings
-    FACE_DATABASE_PATH = "known_faces.json"
+    FACE_DATABASE_PATH = str(BASE_DIR / "known_faces.json")
     RECOGNITION_TOLERANCE = 0.6  # Lower = more strict (0.4-0.6 recommended)
     ENABLE_FACE_RECOGNITION = True  # Set to False to disable recognition
     
@@ -119,13 +122,18 @@ class Config:
     API_SERVER_ENABLED = False  # Set to True to start FastAPI server
     API_SERVER_HOST = "0.0.0.0"
     API_SERVER_PORT = 8000
-    API_FRAME_STORAGE_DIR = "frames"
+    API_FRAME_STORAGE_DIR = str(BASE_DIR / "frames")
     API_FRAME_BASE_URL = None  # e.g., "http://raspberrypi.local:8000/frames"
     CAMERA_ID = "raspberry_pi_camera"  # Camera identifier for events
     
     # Unknown person alert settings
     ENABLE_UNKNOWN_PERSON_ALERTS = True  # Set to True to enable unknown person alerts
     UNKNOWN_PERSON_ALERT_COOLDOWN = 30  # Seconds between alerts for same unknown person (prevents spam)
+    
+    # Verified person alert settings
+    ENABLE_VERIFIED_PERSON_ALERTS = True  # Set to True to enable verified person alerts
+    VERIFIED_PERSON_CONFIDENCE_THRESHOLD = 0.95  # Minimum confidence for verified person alerts (0.0-1.0)
+    VERIFIED_PERSON_ALERT_COOLDOWN = 60  # Seconds between alerts for same verified person (prevents spam)
     
     # Colors (RGB format for PIL)
     BOX_COLOR = (0, 255, 0)  # Green for detected faces
@@ -191,6 +199,9 @@ class RaspberryPiFaceDetector:
         
         # Unknown person alert tracking
         self.last_unknown_alert_time = {}  # Track last alert time per unknown face (by bbox hash)
+        
+        # Verified person alert tracking
+        self.last_verified_alert_time = {}  # Track last alert time per verified person (by name)
         
         print("🚀 Initializing Raspberry Pi 5 Face Detection & Recognition System (Picamera2 Only)...")
         self.initialize_model()
@@ -506,6 +517,132 @@ class RaspberryPiFaceDetector:
         
         except Exception as e:
             print(f"⚠️  Error sending unknown person alert: {e}")
+    
+    def send_verified_person_alert(self, boxes, scores, names, frame):
+        """
+        Send alert for verified person detection with captured image and person information
+        
+        Args:
+            boxes: List of bounding boxes for verified faces
+            scores: List of confidence scores
+            names: List of recognized names
+            frame: Frame numpy array with the verified person
+        """
+        if not self.config.ENABLE_VERIFIED_PERSON_ALERTS:
+            return
+        
+        if not self.n8n_client or len(boxes) == 0 or not self.create_detection_event:
+            return
+        
+        if not self.face_recognition_enabled:
+            return  # Can't verify without recognition enabled
+        
+        try:
+            from datetime import datetime
+            
+            # Filter for verified persons only (confidence >= threshold, name not "Unknown")
+            verified_detections = []
+            verified_boxes = []
+            verified_scores = []
+            verified_names = []
+            current_time = time.time()
+            
+            for i, (box, score, name) in enumerate(zip(boxes, scores, names)):
+                # Check if this is a verified person
+                if name is None or name == "Unknown":
+                    continue
+                
+                # Check confidence threshold
+                if float(score) < self.config.VERIFIED_PERSON_CONFIDENCE_THRESHOLD:
+                    continue
+                
+                # Check cooldown per person (by name)
+                if name in self.last_verified_alert_time:
+                    time_since_last = current_time - self.last_verified_alert_time[name]
+                    if time_since_last < self.config.VERIFIED_PERSON_ALERT_COOLDOWN:
+                        continue  # Skip this detection (still in cooldown)
+                
+                # Add to verified detections
+                verified_boxes.append(box)
+                verified_scores.append(score)
+                verified_names.append(name)
+                verified_detections.append({
+                    "label": "verified_person",
+                    "confidence": float(score),
+                    "bbox": [float(x) for x in box[:4]] if len(box) >= 4 else [0, 0, 0, 0],
+                    "name": name
+                })
+                
+                # Update last alert time
+                self.last_verified_alert_time[name] = current_time
+            
+            # Only send alert if we have verified detections
+            if len(verified_detections) == 0:
+                return
+            
+            # Crop the frame to show the verified person(s) more clearly
+            # Get bounding box that encompasses all verified faces
+            if len(verified_boxes) > 0:
+                min_x = min(box[0] for box in verified_boxes)
+                min_y = min(box[1] for box in verified_boxes)
+                max_x = max(box[2] for box in verified_boxes)
+                max_y = max(box[3] for box in verified_boxes)
+                
+                # Add padding
+                padding = 20
+                h, w = frame.shape[:2]
+                crop_x1 = max(0, int(min_x) - padding)
+                crop_y1 = max(0, int(min_y) - padding)
+                crop_x2 = min(w, int(max_x) + padding)
+                crop_y2 = min(h, int(max_y) + padding)
+                
+                # Crop frame
+                cropped_frame = frame[crop_y1:crop_y2, crop_x1:crop_x2]
+            else:
+                cropped_frame = frame
+            
+            # Get current date and time
+            now = datetime.now()
+            date_str = now.strftime("%Y-%m-%d")
+            time_str = now.strftime("%H:%M:%S")
+            datetime_str = now.strftime("%Y-%m-%d %H:%M:%S")
+            
+            # Create alert event with person information
+            event = self.create_detection_event(
+                camera_id=self.config.CAMERA_ID,
+                event_type="verified_person_detected",
+                detections=verified_detections,
+                frame=cropped_frame,  # Send cropped frame focusing on verified person
+                metadata={
+                    "frame_count": self.frame_count,
+                    "fps": self.current_fps,
+                    "alert_type": "verified_person",
+                    "count": len(verified_detections),
+                    "cooldown_seconds": self.config.VERIFIED_PERSON_ALERT_COOLDOWN,
+                    "confidence_threshold": self.config.VERIFIED_PERSON_CONFIDENCE_THRESHOLD,
+                    # Person information
+                    "persons": [
+                        {
+                            "name": name,
+                            "confidence": float(score),
+                            "date": date_str,
+                            "time": time_str,
+                            "datetime": datetime_str,
+                            "timestamp": now.isoformat()
+                        }
+                        for name, score in zip(verified_names, verified_scores)
+                    ]
+                }
+            )
+            
+            # Send to n8n
+            self.n8n_client.send_event(event, async_send=True)
+            
+            person_names = ", ".join(verified_names)
+            print(f"✅ Verified person alert sent: {person_names} (confidence: {min(verified_scores):.2f})")
+        
+        except Exception as e:
+            print(f"⚠️  Error sending verified person alert: {e}")
     
     def initialize_display(self):
         """Initialize tkinter display window"""
@@ -1010,6 +1147,21 @@ class RaspberryPiFaceDetector:
                             if self.n8n_client and len(boxes) > 0:
                                 self.send_detection_event(boxes, scores, self.last_names, frame)
                                 
+                                # Check for verified persons and send alert (95%+ confidence)
+                                if self.config.ENABLE_VERIFIED_PERSON_ALERTS:
+                                    # Filter for verified faces (high confidence, recognized)
+                                    verified_boxes = []
+                                    verified_scores = []
+                                    verified_names = []
+                                    for i, (name, score) in enumerate(zip(self.last_names, scores)):
+                                        if name and name != "Unknown" and float(score) >= self.config.VERIFIED_PERSON_CONFIDENCE_THRESHOLD:
+                                            verified_boxes.append(boxes[i])
+                                            verified_scores.append(scores[i])
+                                            verified_names.append(name)
+                                    
+                                    if len(verified_boxes) > 0:
+                                        self.send_verified_person_alert(verified_boxes, verified_scores, verified_names, frame)
+                                
                                 # Check for unknown persons and send alert
                                 if self.config.ENABLE_UNKNOWN_PERSON_ALERTS:
                                     # Filter for unknown faces
@@ -1063,6 +1215,21 @@ class RaspberryPiFaceDetector:
                             # Send detection event to n8n if enabled
                             if self.n8n_client and len(boxes) > 0:
                                 self.send_detection_event(boxes, scores, self.last_names, frame)
+                                
+                                # Check for verified persons and send alert (95%+ confidence)
+                                if self.config.ENABLE_VERIFIED_PERSON_ALERTS:
+                                    # Filter for verified faces (high confidence, recognized)
+                                    verified_boxes = []
+                                    verified_scores = []
+                                    verified_names = []
+                                    for i, (name, score) in enumerate(zip(self.last_names, scores)):
+                                        if name and name != "Unknown" and float(score) >= self.config.VERIFIED_PERSON_CONFIDENCE_THRESHOLD:
+                                            verified_boxes.append(boxes[i])
+                                            verified_scores.append(scores[i])
+                                            verified_names.append(name)
+                                    
+                                    if len(verified_boxes) > 0:
+                                        self.send_verified_person_alert(verified_boxes, verified_scores, verified_names, frame)
                                 
                                 # Check for unknown persons and send alert
                                 if self.config.ENABLE_UNKNOWN_PERSON_ALERTS:
@@ -1175,7 +1342,9 @@ class RaspberryPiFaceDetector:
 def main():
     """Main function"""
     parser = argparse.ArgumentParser(description="Raspberry Pi 5 Face Detection System (Picamera2 Only)")
-    parser.add_argument("--model", type=str, default="yolov12n-face.pt", 
+    # Get default model path from Config
+    default_model = str(Config.BASE_DIR / "models" / "yolov12n-face.pt")
+    parser.add_argument("--model", type=str, default=default_model, 
                        help="Path to YOLO model file")
     parser.add_argument("--conf", type=float, default=0.5, 
                        help="Confidence threshold (0.0-1.0)")
