@@ -1,2 +1,13 @@
 # Auto detect text files and perform LF normalization
 * text=auto
+
+# Preserve executable permissions for shell scripts
+*.sh text eol=lf
+*.py text eol=lf
+
+# Make scripts executable by default
+run.sh text eol=lf
+run_api.sh text eol=lf
+run_enroll.sh text eol=lf
+fix_permissions.sh text eol=lf
+scripts/*.sh text eol=lf

@@ -27,17 +27,25 @@ Raspberry Pi OS (Debian-based) uses PEP 668 to prevent breaking system Python pa
 
 ## Complete Installation Steps
 
-If `face_recognition` fails, install dependencies first:
+**IMPORTANT:** Install CMake and dependencies FIRST before installing face_recognition:
 
 ```bash
-# 1. Install dlib dependencies
-sudo apt install -y libdlib-dev cmake libopenblas-dev liblapack-dev
+# 1. Update package list
+sudo apt update
 
-# 2. Install face_recognition
+# 2. Install CMake and dlib dependencies (REQUIRED)
+sudo apt install -y cmake libdlib-dev libopenblas-dev liblapack-dev
+
+# 3. Verify CMake is installed
+cmake --version
+
+# 4. Install face_recognition
 python3 -m pip install --break-system-packages face_recognition
 ```
 
 **Note:** Building dlib can take 10-30 minutes on Raspberry Pi.
+
+**If you get CMake error:** See [QUICK_FIX_CMAKE.md](QUICK_FIX_CMAKE.md) for detailed CMake troubleshooting.
 
 ## Alternative: Use Setup Script
 

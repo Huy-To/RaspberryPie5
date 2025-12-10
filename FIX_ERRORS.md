@@ -70,7 +70,46 @@ ls -l run.sh scripts/run.sh
 # Should show: -rwxr-xr-x (executable)
 ```
 
-## Error 4: externally-managed-environment
+## Error 4: CMake Not Installed (dlib build failure)
+
+**Error:**
+```
+CMake is not installed on your system!
+ERROR: Failed building wheel for dlib
+```
+
+**Status:** ✅ **FIXED** - Setup script now checks and installs cmake
+
+**Solution:**
+
+Install CMake and dependencies:
+
+```bash
+# Install CMake and dlib dependencies
+sudo apt update
+sudo apt install -y cmake libdlib-dev libopenblas-dev liblapack-dev
+
+# Verify CMake is installed
+cmake --version
+
+# Install face_recognition
+python3 -m pip install --break-system-packages face_recognition
+```
+
+**Note:** Building dlib can take 10-30 minutes on Raspberry Pi.
+
+**Verification:**
+```bash
+# Check cmake
+cmake --version
+
+# Check face_recognition
+python3 -c "import face_recognition; print('✅ face_recognition installed')"
+```
+
+**See Also:** [QUICK_FIX_CMAKE.md](QUICK_FIX_CMAKE.md) for detailed guide
+
+## Error 5: externally-managed-environment
 
 **Error:**
 ```
@@ -155,6 +194,8 @@ ls -l run.sh run_api.sh run_enroll.sh
 python3 -c "from picamera2 import Picamera2; print('✅ picamera2')"
 python3 -c "from ultralytics import YOLO; print('✅ ultralytics')"
 python3 -c "import multipart; print('✅ python-multipart')"
+cmake --version && echo "✅ cmake" || echo "⚠️  cmake not installed"
+python3 -c "import face_recognition; print('✅ face_recognition')" 2>/dev/null || echo "⚠️  face_recognition not installed"
 
 # 3. Test API server starts
 ./run_api.sh

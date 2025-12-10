@@ -5,13 +5,15 @@
 ### Step 1: Install Dependencies
 ```bash
 cd RaspberryPie5
-chmod +x scripts/setup.sh
-./scripts/setup.sh
 
-# If you see permission errors after setup:
-chmod +x fix_permissions.sh
+# Fix permissions (especially after git pull)
 ./fix_permissions.sh
+
+# Run setup
+./scripts/setup.sh
 ```
+
+**Note:** If you pulled from GitHub, run `./fix_permissions.sh` first to make scripts executable.
 
 ### Step 2: Run Face Detection
 ```bash

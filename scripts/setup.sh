@@ -82,14 +82,36 @@ if [ "$LIBCAP_INSTALLED" = false ]; then
 fi
 
 # Try to install dlib dependencies (for face_recognition)
-echo "🔧 Installing dlib dependencies (for face recognition)..."
-for pkg in libdlib-dev cmake libopenblas-dev liblapack-dev; do
-    if sudo apt install -y "$pkg" 2>/dev/null; then
+echo "🔧 Installing dlib dependencies (REQUIRED for face_recognition)..."
+echo "   Installing: cmake, libdlib-dev, libopenblas-dev, liblapack-dev"
+set +e  # Don't exit on error for individual packages
+CMake_INSTALLED=false
+for pkg in cmake libdlib-dev libopenblas-dev liblapack-dev; do
+    if sudo apt install -y "$pkg" 2>&1 | grep -q "Setting up\|is already"; then
         echo "✅ Installed: $pkg"
+        if [ "$pkg" = "cmake" ]; then
+            CMake_INSTALLED=true
+        fi
     else
-        echo "⚠️  Package not available: $pkg (may need to build dlib from source)"
+        echo "⚠️  Failed to install: $pkg"
+        if [ "$pkg" = "cmake" ]; then
+            echo "   ⚠️  WARNING: cmake is REQUIRED for building dlib!"
+            echo "   Try manually: sudo apt update && sudo apt install -y cmake"
+        fi
     fi
 done
+
+# Verify cmake is installed
+if command -v cmake &> /dev/null; then
+    CMAKE_VERSION=$(cmake --version | head -n1)
+    echo "✅ cmake verified: $CMAKE_VERSION"
+    CMake_INSTALLED=true
+else
+    echo "❌ cmake is NOT installed or not in PATH"
+    echo "   This will cause dlib build to fail!"
+    echo "   Install with: sudo apt install -y cmake"
+    CMake_INSTALLED=false
+fi
 
 # Try to install other optional packages
 for pkg in libopencv-dev libatlas-base-dev libhdf5-dev libhdf5-serial-dev; do
@@ -188,31 +210,58 @@ set -e  # Re-enable exit on error
 # Install face_recognition (for facial recognition features)
 echo "   Installing face_recognition (this may take a while - requires dlib)..."
 echo "   Note: face_recognition requires dlib, which can take 10-30 minutes to build on Raspberry Pi"
-set +e  # Don't exit on error for face_recognition (it's optional)
-if python3 -m pip install --no-cache-dir --break-system-packages --no-warn-script-location face_recognition 2>&1 | tee /tmp/face_recognition_install.log; then
-    echo "✅ face_recognition installed successfully"
-    FACE_RECOGNITION_INSTALLED=true
-else
+
+# Check if cmake is available before attempting installation
+if [ "$CMake_INSTALLED" = false ]; then
     echo ""
-    echo "⚠️  face_recognition installation failed or is taking too long"
+    echo "❌ SKIPPING face_recognition installation - cmake is not installed!"
     echo ""
-    if grep -q "dlib" /tmp/face_recognition_install.log 2>/dev/null; then
-        echo "   Error: dlib build failed or taking too long"
-        echo ""
-        echo "   SOLUTION: Install dlib system package first:"
-        echo "   sudo apt install -y libdlib-dev"
-        echo "   Then try: python3 -m pip install --break-system-packages face_recognition"
-        echo ""
-        echo "   Or build dlib from source (takes 10-30 minutes):"
-        echo "   sudo apt install -y cmake libopenblas-dev liblapack-dev"
-        echo "   python3 -m pip install --break-system-packages dlib"
-        echo "   python3 -m pip install --break-system-packages face_recognition"
-    fi
-    echo "   Full error log saved to: /tmp/face_recognition_install.log"
-    echo "   ⚠️  Face recognition features will be disabled until face_recognition is installed"
+    echo "   SOLUTION: Install cmake first:"
+    echo "   sudo apt update"
+    echo "   sudo apt install -y cmake libdlib-dev libopenblas-dev liblapack-dev"
+    echo ""
+    echo "   Then re-run this script or install manually:"
+    echo "   python3 -m pip install --break-system-packages face_recognition"
+    echo ""
     FACE_RECOGNITION_INSTALLED=false
+else
+    set +e  # Don't exit on error for face_recognition (it's optional)
+    if python3 -m pip install --no-cache-dir --break-system-packages --no-warn-script-location face_recognition 2>&1 | tee /tmp/face_recognition_install.log; then
+        echo "✅ face_recognition installed successfully"
+        FACE_RECOGNITION_INSTALLED=true
+    else
+        echo ""
+        echo "⚠️  face_recognition installation failed"
+        echo ""
+        if grep -qi "CMake\|cmake" /tmp/face_recognition_install.log 2>/dev/null; then
+            echo "   Error: CMake is not installed or not working"
+            echo ""
+            echo "   SOLUTION:"
+            echo "   1. Verify cmake: cmake --version"
+            echo "   2. If not installed: sudo apt install -y cmake"
+            echo "   3. If installed but not found: which cmake"
+            echo "   4. Install all dependencies: sudo apt install -y cmake libdlib-dev libopenblas-dev liblapack-dev"
+            echo "   5. Then retry: python3 -m pip install --break-system-packages face_recognition"
+            echo ""
+        elif grep -qi "dlib" /tmp/face_recognition_install.log 2>/dev/null; then
+            echo "   Error: dlib build failed"
+            echo ""
+            echo "   SOLUTION: Install all dlib dependencies:"
+            echo "   sudo apt install -y cmake libdlib-dev libopenblas-dev liblapack-dev"
+            echo "   Then try: python3 -m pip install --break-system-packages face_recognition"
+            echo ""
+        else
+            echo "   Troubleshooting:"
+            echo "   1. Install dependencies: sudo apt install -y cmake libdlib-dev libopenblas-dev liblapack-dev"
+            echo "   2. Try installing dlib separately: python3 -m pip install --break-system-packages dlib"
+            echo "   3. Then install face_recognition: python3 -m pip install --break-system-packages face_recognition"
+        fi
+        echo "   Full error log saved to: /tmp/face_recognition_install.log"
+        echo "   ⚠️  Face recognition features will be disabled until face_recognition is installed"
+        FACE_RECOGNITION_INSTALLED=false
+    fi
+    set -e  # Re-enable exit on error
 fi
-set -e  # Re-enable exit on error
 
 # Install imageio and imageio-ffmpeg (for video processing in enrollment)
 echo "   Installing imageio and imageio-ffmpeg (for video processing)..."
@@ -244,12 +293,25 @@ else
 fi
 set -e  # Re-enable exit on error
 
-# Make all scripts executable
+# Make all scripts executable using fix_permissions.sh
 echo "🔧 Making scripts executable..."
-cd "$(dirname "$0")/.." || exit 1
-chmod +x run.sh run_api.sh run_enroll.sh 2>/dev/null || true
-chmod +x scripts/*.sh 2>/dev/null || true
-chmod +x src/*.py 2>/dev/null || true
+PROJECT_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+cd "$PROJECT_ROOT" || exit 1
+
+if [ -f "$PROJECT_ROOT/fix_permissions.sh" ]; then
+    chmod +x "$PROJECT_ROOT/fix_permissions.sh" 2>/dev/null || true
+    bash "$PROJECT_ROOT/fix_permissions.sh" 2>/dev/null || {
+        # Fallback if fix_permissions.sh fails
+        chmod +x run.sh run_api.sh run_enroll.sh 2>/dev/null || true
+        chmod +x scripts/*.sh 2>/dev/null || true
+        chmod +x src/*.py 2>/dev/null || true
+    }
+else
+    # Fallback if fix_permissions.sh doesn't exist
+    chmod +x run.sh run_api.sh run_enroll.sh 2>/dev/null || true
+    chmod +x scripts/*.sh 2>/dev/null || true
+    chmod +x src/*.py 2>/dev/null || true
+fi
 echo "✅ Scripts made executable"
 
 # Verify installations
@@ -349,9 +411,21 @@ set -e  # Re-enable exit on error
 # Make scripts executable (already done earlier, but ensure it's done)
 echo "🔐 Ensuring scripts are executable..."
 cd "$PROJECT_ROOT" || exit 1
-chmod +x run.sh run_api.sh run_enroll.sh 2>/dev/null || true
-chmod +x scripts/*.sh 2>/dev/null || true
-chmod +x src/*.py 2>/dev/null || true
+
+if [ -f "$PROJECT_ROOT/fix_permissions.sh" ]; then
+    chmod +x "$PROJECT_ROOT/fix_permissions.sh" 2>/dev/null || true
+    bash "$PROJECT_ROOT/fix_permissions.sh" 2>/dev/null || {
+        # Fallback if fix_permissions.sh fails
+        chmod +x run.sh run_api.sh run_enroll.sh 2>/dev/null || true
+        chmod +x scripts/*.sh 2>/dev/null || true
+        chmod +x src/*.py 2>/dev/null || true
+    }
+else
+    # Fallback if fix_permissions.sh doesn't exist
+    chmod +x run.sh run_api.sh run_enroll.sh 2>/dev/null || true
+    chmod +x scripts/*.sh 2>/dev/null || true
+    chmod +x src/*.py 2>/dev/null || true
+fi
 echo "✅ All scripts are executable"
 
 echo ""

@@ -171,16 +171,27 @@ sudo usermod -aG video $USER
 
 ### Installation Issues
 ```bash
+# Fix script permissions (run after git pull)
+./fix_permissions.sh
+
 # Fix libcap installation
 ./scripts/fix_libcap.sh
 
 # Fix numpy compatibility
 ./scripts/fix_numpy.sh
-
-# Fix script permissions
-chmod +x fix_permissions.sh
-./fix_permissions.sh
 ```
+
+### Git Pull Issues (Permissions)
+```bash
+# After pulling from GitHub, fix permissions automatically:
+./fix_permissions.sh
+
+# Or set up git hooks for automatic fix (one-time):
+chmod +x .git/hooks/post-merge .git/hooks/post-checkout
+# Now permissions fix automatically after every git pull!
+```
+
+**See [Git Permissions Guide](docs/GIT_PERMISSIONS_GUIDE.md) for details.**
 
 ### API Server Issues
 ```bash
