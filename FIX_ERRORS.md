@@ -75,7 +75,7 @@ ls -l run.sh scripts/run.sh
 **Error:**
 ```
 error: externally-managed-environment
-This environment is externally managed
+× This environment is externally managed
 ```
 
 **Status:** ✅ **FIXED** - All pip commands use --break-system-packages
@@ -92,10 +92,32 @@ python3 -m pip install --break-system-packages <package>
 pip install <package>
 ```
 
-**Example:**
+**Examples:**
 ```bash
-python3 -m pip install --break-system-packages python-multipart
+# Install face_recognition
 python3 -m pip install --break-system-packages face_recognition
+
+# Install python-multipart
+python3 -m pip install --break-system-packages python-multipart
+
+# Install with all recommended flags
+python3 -m pip install --no-cache-dir --break-system-packages --no-warn-script-location face_recognition
+```
+
+**If face_recognition fails, install dependencies first:**
+```bash
+# Install dlib dependencies
+sudo apt install -y libdlib-dev cmake libopenblas-dev liblapack-dev
+
+# Then install face_recognition
+python3 -m pip install --break-system-packages face_recognition
+```
+
+**Note:** Building dlib can take 10-30 minutes on Raspberry Pi.
+
+**Verification:**
+```bash
+python3 -c "import face_recognition; print('✅ face_recognition installed')"
 ```
 
 ## Quick Fix All Errors

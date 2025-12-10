@@ -152,6 +152,7 @@ class Config:
 ## 📚 Documentation
 
 - **[Raspberry Pi Setup Guide](docs/RASPBERRY_PI_SETUP_GUIDE.md)** - ⭐ **Complete step-by-step setup guide**
+- **[HTTP API Usage Guide](docs/HTTP_API_USAGE_GUIDE.md)** - ⭐ **Complete guide on using the HTTP API**
 - **[API Guide](docs/API_GUIDE.md)** - Quick start guide for API usage
 - **[API Reference](docs/API_REFERENCE.md)** - Complete API endpoint documentation
 - **[Command API Guide](docs/COMMAND_API.md)** - Guide for sending commands from n8n to the system

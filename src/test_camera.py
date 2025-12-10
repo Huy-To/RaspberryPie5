@@ -18,7 +18,7 @@ except ImportError as e:
     print(f"❌ picamera2 is NOT installed: {e}")
     print("\nTo install:")
     print("  source face_detection_env/bin/activate")
-    print("  pip install picamera2")
+    print("  python3 -m pip install --break-system-packages picamera2")
     sys.exit(1)
 
 # Test 2: Try to initialize camera

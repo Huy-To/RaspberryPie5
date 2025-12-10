@@ -36,7 +36,7 @@ except ImportError:
     face_recognition = None
     print("⚠️  Warning: face_recognition library not available.")
     print("   Facial recognition features will be disabled.")
-    print("   Install with: pip install face_recognition")
+    print("   Install with: python3 -m pip install --break-system-packages face_recognition")
 
 # Try to import ImageTk (requires both Pillow and tkinter)
 try:
@@ -235,14 +235,14 @@ class RaspberryPiFaceDetector:
             sys.exit(1)
         except Exception as e:
             print(f"❌ Error loading model: {e}")
-            print("   Make sure ultralytics is installed: pip install ultralytics")
+            print("   Make sure ultralytics is installed: python3 -m pip install --break-system-packages ultralytics")
             sys.exit(1)
     
     def initialize_camera(self):
         """Initialize picamera2 camera capture"""
         if not PICAMERA2_AVAILABLE:
             raise RuntimeError(
-                "picamera2 is not available. Install with: pip install picamera2\n"
+                "picamera2 is not available. Install with: python3 -m pip install --break-system-packages picamera2\n"
                 "Note: This system only supports Raspberry Pi Camera Module via picamera2."
             )
         
@@ -287,7 +287,7 @@ class RaspberryPiFaceDetector:
         
         if not FACE_RECOGNITION_AVAILABLE:
             print("⚠️  face_recognition library not available - recognition disabled")
-            print("   Install with: pip install face_recognition")
+            print("   Install with: python3 -m pip install --break-system-packages face_recognition")
             return
         
         try:
@@ -370,7 +370,7 @@ class RaspberryPiFaceDetector:
             
         except ImportError as e:
             print(f"⚠️  API integration not available: {e}")
-            print("   Install with: pip install fastapi uvicorn httpx")
+            print("   Install with: python3 -m pip install --break-system-packages fastapi uvicorn httpx")
         except Exception as e:
             print(f"⚠️  Error initializing API integration: {e}")
     

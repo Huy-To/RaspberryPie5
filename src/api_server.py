@@ -44,7 +44,7 @@ except ImportError:
     FASTAPI_AVAILABLE = False
     FastAPI = None
     print("⚠️  Warning: FastAPI not available. API features will be disabled.")
-    print("   Install with: pip install fastapi uvicorn httpx")
+    print("   Install with: python3 -m pip install --break-system-packages fastapi uvicorn httpx")
 
 # ============================================================================
 # EVENT MODELS (Pydantic schemas)
@@ -719,7 +719,7 @@ def initialize_api_server(
     
     if not FASTAPI_AVAILABLE:
         print("❌ FastAPI not available - API server cannot start")
-        print("   Install with: pip install fastapi uvicorn httpx")
+        print("   Install with: python3 -m pip install --break-system-packages fastapi uvicorn httpx")
         return None
     
     # Initialize components

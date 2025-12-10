@@ -29,7 +29,7 @@ except ImportError:
     FACE_RECOGNITION_AVAILABLE = False
     face_recognition = None
     print("❌ face_recognition library not available.")
-    print("   Install with: pip install face_recognition")
+    print("   Install with: python3 -m pip install --break-system-packages face_recognition")
     sys.exit(1)
 
 # Try to import imageio for video processing (lightweight)
@@ -40,7 +40,7 @@ except ImportError:
     IMAGEIO_AVAILABLE = False
     imageio = None
     print("❌ imageio library not available.")
-    print("   Install with: pip install imageio imageio-ffmpeg")
+    print("   Install with: python3 -m pip install --break-system-packages imageio imageio-ffmpeg")
     sys.exit(1)
 
 # Configuration
@@ -174,7 +174,9 @@ def process_video(video_path, max_frames=DEFAULT_MAX_FRAMES, frame_skip=FRAME_SK
     try:
         # Open video file
         print("   Opening video file...")
-        reader = imageio.get_reader(str(video_path))
+        video_path_str = str(video_path.absolute())
+        print(f"   Video path: {video_path_str}")
+        reader = imageio.get_reader(video_path_str)
         
         # Get video info
         fps = reader.get_meta_data().get('fps', 30)
