@@ -3,12 +3,21 @@
 FastAPI Server for n8n Integration
 ===================================
 
-This module provides HTTP API endpoints for sending detection events to n8n.
-It follows the push model: when detections occur, events are sent to n8n webhook URLs.
+RESTful API with GET endpoints for all system functionalities.
+All read operations use GET, write operations use POST.
 
-Endpoints:
-- POST /event - Receive detection events and forward to n8n
-- POST /training-clip - Accept training clip metadata
+GET Endpoints (for n8n HTTP Request):
+- GET / - API information
+- GET /health - Health check
+- GET /status - System status
+- GET /detections - Recent detections (?limit=10&event_type=verified_person)
+- GET /enrolled-faces - List enrolled faces
+- GET /statistics - Detection statistics
+- GET /config - Current configuration
+
+POST Endpoints (for sending data):
+- POST /unknown-person-alert - Send unknown person alert
+- POST /verified-person-alert - Send verified person alert
 
 Author: AI Assistant
 Date: 2024
@@ -269,102 +278,6 @@ if FASTAPI_AVAILABLE:
     webhook_client: Optional[N8NWebhookClient] = None
     frame_storage: Optional[FrameStorageManager] = None
     
-    # Command handler state
-    detection_system_status = {
-        "running": False,
-        "last_detection": None,
-        "stats": {
-            "total_detections": 0,
-            "verified_persons": 0,
-            "unknown_persons": 0,
-            "last_update": None
-        }
-    }
-    
-    @app.post("/event", response_model=Dict[str, Any])
-    async def receive_event(event: DetectionEvent):
-        """
-        Receive detection event and forward to n8n webhook
-        
-        This endpoint is called internally by the detection system when events occur.
-        """
-        try:
-            # Convert event to dictionary
-            event_dict = event.dict()
-            
-            # Send to n8n webhook (async)
-            if webhook_client:
-                webhook_client.send_event(event_dict, async_send=True)
-            
-            return {
-                "status": "success",
-                "message": "Event received and queued for n8n",
-                "event_type": event.event_type,
-                "timestamp": event.timestamp
-            }
-        
-        except Exception as e:
-            raise HTTPException(status_code=500, detail=f"Error processing event: {str(e)}")
-    
-    @app.post("/training-clip", response_model=Dict[str, Any])
-    async def receive_training_clip(
-        clip_path: str = Form(...),
-        camera_id: str = Form(...),
-        clip_url: Optional[str] = Form(None),
-        duration: Optional[float] = Form(None),
-        frame_count: Optional[int] = Form(None),
-        metadata: Optional[str] = Form(None),  # JSON string
-        frame_preview: Optional[UploadFile] = File(None)
-    ):
-        """
-        Receive training clip metadata and optionally a preview frame
-        
-        This endpoint accepts metadata about saved training clips.
-        """
-        try:
-            # Parse metadata if provided
-            metadata_dict = {}
-            if metadata:
-                try:
-                    metadata_dict = json.loads(metadata)
-                except json.JSONDecodeError:
-                    pass
-            
-            # Handle preview frame if provided
-            frame_url = None
-            if frame_preview:
-                frame_data = await frame_preview.read()
-                if frame_storage:
-                    _, frame_url = frame_storage.save_frame(frame_data)
-            
-            # Create training clip event
-            clip_event = TrainingClipEvent(
-                camera_id=camera_id,
-                clip_path=clip_path,
-                clip_url=clip_url,
-                timestamp=datetime.now().isoformat(),
-                duration=duration,
-                frame_count=frame_count,
-                metadata=metadata_dict
-            )
-            
-            # Convert to dictionary for n8n
-            event_dict = clip_event.dict()
-            event_dict["event_type"] = "training_clip_ready"
-            
-            # Send to n8n webhook
-            if webhook_client:
-                webhook_client.send_event(event_dict, async_send=True)
-            
-            return {
-                "status": "success",
-                "message": "Training clip event received",
-                "clip_path": clip_path,
-                "frame_url": frame_url
-            }
-        
-        except Exception as e:
-            raise HTTPException(status_code=500, detail=f"Error processing training clip: {str(e)}")
     
     @app.get("/health")
     async def health_check():
@@ -373,6 +286,122 @@ if FASTAPI_AVAILABLE:
             "status": "healthy",
             "webhook_enabled": webhook_client.enabled if webhook_client else False,
             "webhook_url": webhook_client.webhook_url if webhook_client else None
+        }
+    
+    @app.get("/status")
+    async def get_status_simple():
+        """
+        Simple GET endpoint for system status (alternative to POST /command)
+        
+        Useful for n8n HTTP Request nodes using GET method.
+        Returns basic system status without requiring POST body.
+        """
+        BASE_DIR = Path(__file__).parent.parent
+        
+        # Check if detection system is running
+        status_file = BASE_DIR / ".detection_status.json"
+        is_running = False
+        if status_file.exists():
+            try:
+                with open(status_file, 'r') as f:
+                    status_data = json.load(f)
+                    is_running = status_data.get("running", False)
+            except:
+                pass
+        
+        # Get face database info
+        face_db_path = BASE_DIR / "known_faces.json"
+        enrolled_count = 0
+        if face_db_path.exists():
+            try:
+                with open(face_db_path, 'r') as f:
+                    face_db = json.load(f)
+                    enrolled_count = len(face_db)
+            except:
+                pass
+        
+        # Get frame count
+        frames_dir = BASE_DIR / "frames"
+        frame_count = 0
+        if frames_dir.exists():
+            frame_count = len(list(frames_dir.glob("*.jpg")))
+        
+        return {
+            "status": "success",
+            "system": {
+                "running": is_running,
+                "api_version": "1.0.0",
+                "webhook_enabled": webhook_client.enabled if webhook_client else False
+            },
+            "face_recognition": {
+                "enabled": True,
+                "enrolled_faces": enrolled_count
+            },
+            "storage": {
+                "frames_stored": frame_count
+            },
+            "timestamp": datetime.now().isoformat()
+        }
+    
+    @app.get("/detections")
+    async def get_recent_detections_simple(
+        limit: int = 10,
+        event_type: Optional[str] = None
+    ):
+        """
+        Simple GET endpoint for recent detections (alternative to POST /command)
+        
+        Query parameters:
+        - limit: Number of detections to return (default: 10)
+        - event_type: Filter by type - "verified_person" or "unknown_person" (optional)
+        
+        Useful for n8n HTTP Request nodes using GET method.
+        """
+        BASE_DIR = Path(__file__).parent.parent
+        frames_dir = BASE_DIR / "frames"
+        
+        detections = []
+        if frames_dir.exists():
+            frame_files = sorted(
+                frames_dir.glob("*.jpg"),
+                key=lambda p: p.stat().st_mtime,
+                reverse=True
+            )[:limit]
+            
+            for frame_file in frame_files:
+                filename = frame_file.name
+                mtime = frame_file.stat().st_mtime
+                
+                detection_type = "unknown"
+                person_name = None
+                
+                if filename.startswith("verified_"):
+                    detection_type = "verified_person"
+                    parts = filename.replace(".jpg", "").split("_")
+                    if len(parts) >= 3:
+                        person_name = "_".join(parts[1:-2])
+                elif filename.startswith("unknown_person_"):
+                    detection_type = "unknown_person"
+                
+                if event_type is None or detection_type == event_type:
+                    frame_url = None
+                    if frame_storage and frame_storage.base_url:
+                        frame_url = f"{frame_storage.base_url}/{filename}"
+                    
+                    detections.append({
+                        "type": detection_type,
+                        "person_name": person_name,
+                        "frame_filename": filename,
+                        "frame_url": frame_url,
+                        "timestamp": datetime.fromtimestamp(mtime).isoformat()
+                    })
+        
+        return {
+            "status": "success",
+            "detections": detections,
+            "count": len(detections),
+            "limit": limit,
+            "event_type_filter": event_type
         }
     
     @app.post("/verified-person-alert", response_model=Dict[str, Any])
@@ -570,272 +599,6 @@ if FASTAPI_AVAILABLE:
         except Exception as e:
             raise HTTPException(status_code=500, detail=f"Error processing unknown person alert: {str(e)}")
     
-    @app.post("/command", response_model=Dict[str, Any])
-    async def handle_command(command: Dict[str, Any]):
-        """
-        Handle commands from n8n
-        
-        This endpoint accepts commands from n8n and returns responses.
-        Commands can be used to control the system, get status, or retrieve data.
-        
-        Supported commands:
-        - "get_status": Get system status and statistics
-        - "get_recent_detections": Get recent detection events
-        - "get_enrolled_faces": List all enrolled faces
-        - "get_statistics": Get detection statistics
-        - "update_config": Update system configuration (limited)
-        - "test_connection": Test API connection
-        
-        Example request:
-        {
-            "command": "get_status",
-            "parameters": {}
-        }
-        """
-        try:
-            cmd = command.get("command", "").lower()
-            params = command.get("parameters", {})
-            
-            if cmd == "get_status":
-                return await handle_get_status()
-            elif cmd == "get_recent_detections":
-                return await handle_get_recent_detections(params)
-            elif cmd == "get_enrolled_faces":
-                return await handle_get_enrolled_faces()
-            elif cmd == "get_statistics":
-                return await handle_get_statistics()
-            elif cmd == "update_config":
-                return await handle_update_config(params)
-            elif cmd == "test_connection":
-                return await handle_test_connection()
-            else:
-                return {
-                    "status": "error",
-                    "message": f"Unknown command: {cmd}",
-                    "available_commands": [
-                        "get_status",
-                        "get_recent_detections",
-                        "get_enrolled_faces",
-                        "get_statistics",
-                        "update_config",
-                        "test_connection"
-                    ]
-                }
-        
-        except Exception as e:
-            raise HTTPException(status_code=500, detail=f"Error processing command: {str(e)}")
-    
-    async def handle_get_status():
-        """Get system status"""
-        BASE_DIR = Path(__file__).parent.parent
-        
-        # Check if detection system is running (check for process or status file)
-        status_file = BASE_DIR / ".detection_status.json"
-        is_running = False
-        if status_file.exists():
-            try:
-                with open(status_file, 'r') as f:
-                    status_data = json.load(f)
-                    is_running = status_data.get("running", False)
-            except:
-                pass
-        
-        # Get face database info
-        face_db_path = BASE_DIR / "known_faces.json"
-        enrolled_count = 0
-        if face_db_path.exists():
-            try:
-                with open(face_db_path, 'r') as f:
-                    face_db = json.load(f)
-                    enrolled_count = len(face_db)
-            except:
-                pass
-        
-        # Get frame count
-        frames_dir = BASE_DIR / "frames"
-        frame_count = 0
-        if frames_dir.exists():
-            frame_count = len(list(frames_dir.glob("*.jpg")))
-        
-        return {
-            "status": "success",
-            "command": "get_status",
-            "data": {
-                "system": {
-                    "running": is_running,
-                    "api_version": "1.0.0",
-                    "webhook_enabled": webhook_client.enabled if webhook_client else False,
-                    "webhook_url": webhook_client.webhook_url if webhook_client else None
-                },
-                "face_recognition": {
-                    "enabled": True,
-                    "enrolled_faces": enrolled_count,
-                    "database_path": str(face_db_path)
-                },
-                "storage": {
-                    "frames_stored": frame_count,
-                    "frames_directory": str(frames_dir)
-                },
-                "timestamp": datetime.now().isoformat()
-            }
-        }
-    
-    async def handle_get_recent_detections(params: Dict[str, Any]):
-        """Get recent detection events"""
-        BASE_DIR = Path(__file__).parent.parent
-        frames_dir = BASE_DIR / "frames"
-        
-        limit = params.get("limit", 10)
-        event_type = params.get("event_type", None)
-        
-        detections = []
-        if frames_dir.exists():
-            frame_files = sorted(
-                frames_dir.glob("*.jpg"),
-                key=lambda p: p.stat().st_mtime,
-                reverse=True
-            )[:limit]
-            
-            for frame_file in frame_files:
-                filename = frame_file.name
-                mtime = frame_file.stat().st_mtime
-                
-                detection_type = "unknown"
-                person_name = None
-                
-                if filename.startswith("verified_"):
-                    detection_type = "verified_person"
-                    parts = filename.replace(".jpg", "").split("_")
-                    if len(parts) >= 3:
-                        person_name = "_".join(parts[1:-2])
-                elif filename.startswith("unknown_person_"):
-                    detection_type = "unknown_person"
-                
-                if event_type is None or detection_type == event_type:
-                    frame_url = None
-                    if frame_storage and frame_storage.base_url:
-                        frame_url = f"{frame_storage.base_url}/{filename}"
-                    
-                    detections.append({
-                        "type": detection_type,
-                        "person_name": person_name,
-                        "frame_filename": filename,
-                        "frame_url": frame_url,
-                        "timestamp": datetime.fromtimestamp(mtime).isoformat()
-                    })
-        
-        return {
-            "status": "success",
-            "command": "get_recent_detections",
-            "data": {
-                "detections": detections,
-                "count": len(detections),
-                "limit": limit,
-                "event_type_filter": event_type
-            }
-        }
-    
-    async def handle_get_enrolled_faces():
-        """Get list of enrolled faces"""
-        BASE_DIR = Path(__file__).parent.parent
-        face_db_path = BASE_DIR / "known_faces.json"
-        
-        enrolled_faces = []
-        if face_db_path.exists():
-            try:
-                with open(face_db_path, 'r') as f:
-                    face_db = json.load(f)
-                    for name, encodings in face_db.items():
-                        enrolled_faces.append({
-                            "name": name,
-                            "encoding_count": len(encodings) if isinstance(encodings, list) else 0
-                        })
-            except Exception as e:
-                return {
-                    "status": "error",
-                    "command": "get_enrolled_faces",
-                    "message": f"Error reading face database: {str(e)}"
-                }
-        
-        return {
-            "status": "success",
-            "command": "get_enrolled_faces",
-            "data": {
-                "faces": enrolled_faces,
-                "total_count": len(enrolled_faces)
-            }
-        }
-    
-    async def handle_get_statistics():
-        """Get detection statistics"""
-        BASE_DIR = Path(__file__).parent.parent
-        frames_dir = BASE_DIR / "frames"
-        
-        stats = {
-            "total_detections": 0,
-            "verified_persons": 0,
-            "unknown_persons": 0,
-            "by_person": {}
-        }
-        
-        if frames_dir.exists():
-            frame_files = list(frames_dir.glob("*.jpg"))
-            stats["total_detections"] = len(frame_files)
-            
-            for frame_file in frame_files:
-                filename = frame_file.name
-                if filename.startswith("verified_"):
-                    stats["verified_persons"] += 1
-                    parts = filename.replace(".jpg", "").split("_")
-                    if len(parts) >= 3:
-                        person_name = "_".join(parts[1:-2])
-                        stats["by_person"][person_name] = stats["by_person"].get(person_name, 0) + 1
-                elif filename.startswith("unknown_person_"):
-                    stats["unknown_persons"] += 1
-        
-        return {
-            "status": "success",
-            "command": "get_statistics",
-            "data": {
-                "statistics": stats,
-                "timestamp": datetime.now().isoformat()
-            }
-        }
-    
-    async def handle_update_config(params: Dict[str, Any]):
-        """Update system configuration (limited - only safe parameters)"""
-        allowed_params = ["camera_id", "alert_cooldown"]
-        
-        updates = {}
-        for key, value in params.items():
-            if key in allowed_params:
-                updates[key] = value
-        
-        if not updates:
-            return {
-                "status": "error",
-                "command": "update_config",
-                "message": "No valid parameters provided",
-                "allowed_parameters": allowed_params
-            }
-        
-        return {
-            "status": "success",
-            "command": "update_config",
-            "message": "Configuration update received",
-            "updates": updates,
-            "note": "Configuration changes require system restart to take effect"
-        }
-    
-    async def handle_test_connection():
-        """Test API connection"""
-        return {
-            "status": "success",
-            "command": "test_connection",
-            "message": "API is responding",
-            "timestamp": datetime.now().isoformat(),
-            "api_version": "1.0.0"
-        }
     
     @app.get("/")
     async def root():
@@ -843,14 +606,21 @@ if FASTAPI_AVAILABLE:
         return {
             "name": "Raspberry Pi Face Detection API",
             "version": "1.0.0",
+            "description": "RESTful API - All read operations use GET, write operations use POST",
             "endpoints": {
-                "POST /command": "Handle commands from n8n",
-                "POST /event": "Receive detection events",
-                "POST /training-clip": "Receive training clip metadata",
-                "POST /verified-person-alert": "Send verified person alert with image and person info",
-                "POST /unknown-person-alert": "Send unknown person alert with image",
+                "GET /": "API information",
                 "GET /health": "Health check",
-                "GET /": "API information"
+                "GET /status": "System status",
+                "GET /detections": "Recent detections (?limit=10&event_type=verified_person)",
+                "GET /enrolled-faces": "List enrolled faces",
+                "GET /statistics": "Detection statistics",
+                "GET /config": "Current configuration",
+                "POST /unknown-person-alert": "Send unknown person alert (multipart/form-data)",
+                "POST /verified-person-alert": "Send verified person alert (multipart/form-data)"
+            },
+            "usage": {
+                "example_get": "GET /detections?limit=10&event_type=verified_person",
+                "example_post": "POST /unknown-person-alert with form-data (camera_id, bbox, confidence, frame)"
             }
         }
 

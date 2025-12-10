@@ -34,8 +34,14 @@ chmod +x run_enroll.sh
 
 ### Run API Server
 ```bash
+# Basic (no webhook)
 ./run_api.sh
+
+# With n8n webhook URL
+./run_api.sh --webhook-url "http://n8n.local:5678/webhook/your-id"
 ```
+
+**See [API Configuration Guide](docs/API_CONFIGURATION.md) for setup details.**
 
 ### Enroll New Face
 ```bash

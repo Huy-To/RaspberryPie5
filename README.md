@@ -78,15 +78,25 @@ python3 src/raspberry_pi_face_detection.py
 
 ### 3. Run API Server
 
+**Basic (no webhook):**
 ```bash
 chmod +x run_api.sh
 ./run_api.sh
 ```
 
-Or with custom options:
+**With n8n webhook URL:**
 ```bash
+# Option 1: Command line argument
+./run_api.sh --webhook-url "http://n8n.local:5678/webhook/abc123"
+
+# Option 2: Environment variable
+N8N_WEBHOOK_URL="http://n8n.local:5678/webhook/abc123" ./run_api.sh
+
+# Option 3: Direct Python call
 python3 src/api_server.py --webhook-url "http://n8n.local:5678/webhook/abc123" --port 8000
 ```
+
+**See [API Configuration Guide](docs/API_CONFIGURATION.md) for detailed setup instructions.**
 
 ### 4. Enroll Faces
 
@@ -145,6 +155,7 @@ class Config:
 - **[API Guide](docs/API_GUIDE.md)** - Quick start guide for API usage
 - **[API Reference](docs/API_REFERENCE.md)** - Complete API endpoint documentation
 - **[Command API Guide](docs/COMMAND_API.md)** - Guide for sending commands from n8n to the system
+- **[Unknown Person API Guide](docs/UNKNOWN_PERSON_API_GUIDE.md)** - How to send unknown person alerts to n8n
 
 ## 🛠️ Troubleshooting
 

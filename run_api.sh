@@ -20,6 +20,14 @@ fi
 # Make sure script is executable
 chmod +x "$API_SCRIPT"
 
+# Check for webhook URL in environment or config
+if [ -z "$N8N_WEBHOOK_URL" ]; then
+    echo "ℹ️  Tip: Set N8N_WEBHOOK_URL environment variable or use --webhook-url argument"
+    echo "   Example: N8N_WEBHOOK_URL='http://n8n.local:5678/webhook/id' ./run_api.sh"
+    echo "   Or: ./run_api.sh --webhook-url 'http://n8n.local:5678/webhook/id'"
+    echo ""
+fi
+
 # Run the API server
 python3 "$API_SCRIPT" "$@"
 

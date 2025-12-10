@@ -107,6 +107,113 @@ URL: http://raspberrypi.local:8000/health
 
 ---
 
+## GET /status - System Status
+
+**Description:** Simple GET endpoint to retrieve system status. Alternative to `POST /command` with `get_status` command. Useful for n8n HTTP Request nodes using GET method.
+
+**Method:** `GET`
+
+**URL:** `http://raspberrypi.local:8000/status`
+
+**Headers:** None required
+
+**Query Parameters:** None
+
+**Request Body:** None
+
+**Response:** `200 OK`
+
+```json
+{
+  "status": "success",
+  "system": {
+    "running": true,
+    "api_version": "1.0.0",
+    "webhook_enabled": true
+  },
+  "face_recognition": {
+    "enabled": true,
+    "enrolled_faces": 5
+  },
+  "storage": {
+    "frames_stored": 42
+  },
+  "timestamp": "2024-01-15T14:30:45.123456"
+}
+```
+
+**n8n Usage:**
+
+```
+HTTP Request Node:
+Method: GET
+URL: http://raspberrypi.local:8000/status
+```
+
+---
+
+## GET /detections - Recent Detections
+
+**Description:** Simple GET endpoint to retrieve recent detection events. Alternative to `POST /command` with `get_recent_detections` command. Useful for n8n HTTP Request nodes using GET method.
+
+**Method:** `GET`
+
+**URL:** `http://raspberrypi.local:8000/detections`
+
+**Headers:** None required
+
+**Query Parameters:**
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `limit` | integer | No | Number of detections to return (default: 10) |
+| `event_type` | string | No | Filter by type: `"verified_person"` or `"unknown_person"` |
+
+**Request Body:** None
+
+**Response:** `200 OK`
+
+```json
+{
+  "status": "success",
+  "detections": [
+    {
+      "type": "verified_person",
+      "person_name": "John Doe",
+      "frame_filename": "verified_John_Doe_20240115_143045.jpg",
+      "frame_url": "http://raspberrypi.local:8000/frames/verified_John_Doe_20240115_143045.jpg",
+      "timestamp": "2024-01-15T14:30:45.123456"
+    }
+  ],
+  "count": 1,
+  "limit": 10,
+  "event_type_filter": null
+}
+```
+
+**Example Requests:**
+
+```bash
+# Get 10 recent detections
+curl "http://raspberrypi.local:8000/detections?limit=10"
+
+# Get 5 verified person detections only
+curl "http://raspberrypi.local:8000/detections?limit=5&event_type=verified_person"
+
+# Get unknown person detections
+curl "http://raspberrypi.local:8000/detections?event_type=unknown_person"
+```
+
+**n8n Usage:**
+
+```
+HTTP Request Node:
+Method: GET
+URL: http://raspberrypi.local:8000/detections?limit=10&event_type=verified_person
+```
+
+---
+
 ## POST /command - n8n Command Handler
 
 **Description:** Handle commands from n8n. This endpoint allows n8n to send commands to the system and receive responses. Use this for bidirectional communication between n8n and the detection system.
