@@ -113,6 +113,16 @@ class Config:
     RECOGNITION_TOLERANCE = 0.6  # Lower = more strict (0.4-0.6 recommended)
     ENABLE_FACE_RECOGNITION = True  # Set to False to disable recognition
     
+    # API/n8n integration settings
+    ENABLE_N8N_INTEGRATION = False  # Set to True to enable n8n webhook integration
+    N8N_WEBHOOK_URL = ""  # n8n webhook URL (e.g., "http://n8n.local:5678/webhook/abc123")
+    API_SERVER_ENABLED = False  # Set to True to start FastAPI server
+    API_SERVER_HOST = "0.0.0.0"
+    API_SERVER_PORT = 8000
+    API_FRAME_STORAGE_DIR = "frames"
+    API_FRAME_BASE_URL = None  # e.g., "http://raspberrypi.local:8000/frames"
+    CAMERA_ID = "raspberry_pi_camera"  # Camera identifier for events
+    
     # Colors (RGB format for PIL)
     BOX_COLOR = (0, 255, 0)  # Green for detected faces
     RECOGNIZED_COLOR = (0, 255, 0)  # Green for recognized faces
@@ -170,10 +180,16 @@ class RaspberryPiFaceDetector:
         self.display_label = None
         self.display_enabled = False
         
+        # API/n8n integration
+        self.n8n_client = None
+        self.api_frame_storage = None
+        self.create_detection_event = None
+        
         print("🚀 Initializing Raspberry Pi 5 Face Detection & Recognition System (Picamera2 Only)...")
         self.initialize_model()
         self.initialize_camera()
         self.initialize_face_recognition()
+        self.initialize_api_integration()
         self.initialize_display()
         
     def initialize_model(self):
@@ -291,6 +307,97 @@ class RaspberryPiFaceDetector:
         except Exception as e:
             print(f"⚠️  Error loading face database: {e}")
             print("   Recognition disabled")
+    
+    def initialize_api_integration(self):
+        """Initialize API and n8n integration"""
+        if not self.config.ENABLE_N8N_INTEGRATION and not self.config.API_SERVER_ENABLED:
+            return
+        
+        try:
+            # Try to import API server module
+            from api_server import (
+                N8NWebhookClient, 
+                FrameStorageManager,
+                initialize_api_server,
+                create_detection_event
+            )
+            
+            # Initialize n8n webhook client if enabled
+            if self.config.ENABLE_N8N_INTEGRATION and self.config.N8N_WEBHOOK_URL:
+                self.n8n_client = N8NWebhookClient(webhook_url=self.config.N8N_WEBHOOK_URL)
+                print(f"✅ n8n webhook client initialized: {self.config.N8N_WEBHOOK_URL}")
+            
+            # Initialize frame storage
+            if self.config.API_FRAME_STORAGE_DIR:
+                self.api_frame_storage = FrameStorageManager(
+                    storage_dir=self.config.API_FRAME_STORAGE_DIR,
+                    base_url=self.config.API_FRAME_BASE_URL
+                )
+                print(f"✅ Frame storage initialized: {self.config.API_FRAME_STORAGE_DIR}")
+            
+            # Start API server if enabled
+            if self.config.API_SERVER_ENABLED:
+                webhook_url = self.config.N8N_WEBHOOK_URL if self.config.ENABLE_N8N_INTEGRATION else None
+                initialize_api_server(
+                    webhook_url=webhook_url,
+                    storage_dir=self.config.API_FRAME_STORAGE_DIR,
+                    base_url=self.config.API_FRAME_BASE_URL,
+                    host=self.config.API_SERVER_HOST,
+                    port=self.config.API_SERVER_PORT
+                )
+                print(f"✅ API server started on {self.config.API_SERVER_HOST}:{self.config.API_SERVER_PORT}")
+            
+            # Store create_detection_event function for later use
+            self.create_detection_event = create_detection_event
+            
+        except ImportError as e:
+            print(f"⚠️  API integration not available: {e}")
+            print("   Install with: pip install fastapi uvicorn httpx")
+        except Exception as e:
+            print(f"⚠️  Error initializing API integration: {e}")
+    
+    def send_detection_event(self, boxes, scores, names, frame=None):
+        """
+        Send detection event to n8n
+        
+        Args:
+            boxes: List of bounding boxes
+            scores: List of confidence scores
+            names: List of recognized names
+            frame: Optional frame numpy array
+        """
+        if not self.n8n_client or len(boxes) == 0 or not self.create_detection_event:
+            return
+        
+        try:
+            # Prepare detections
+            detections = []
+            for i, (box, score) in enumerate(zip(boxes, scores)):
+                name = names[i] if i < len(names) else None
+                detections.append({
+                    "label": "face",
+                    "confidence": float(score),
+                    "bbox": [float(x) for x in box[:4]] if len(box) >= 4 else [0, 0, 0, 0],
+                    "name": name
+                })
+            
+            # Create event
+            event = self.create_detection_event(
+                camera_id=self.config.CAMERA_ID,
+                event_type="face_detected",
+                detections=detections,
+                frame=frame,
+                metadata={
+                    "frame_count": self.frame_count,
+                    "fps": self.current_fps
+                }
+            )
+            
+            # Send to n8n
+            self.n8n_client.send_event(event, async_send=True)
+        
+        except Exception as e:
+            print(f"⚠️  Error sending detection event: {e}")
     
     def initialize_display(self):
         """Initialize tkinter display window"""
@@ -790,6 +897,10 @@ class RaspberryPiFaceDetector:
                             
                             # Draw detections with names
                             frame = self.draw_detections(frame, boxes, scores, self.last_names)
+                            
+                            # Send detection event to n8n if enabled
+                            if self.n8n_client and len(boxes) > 0:
+                                self.send_detection_event(boxes, scores, self.last_names, frame)
                         except queue.Empty:
                             # Use cached results if no new results available
                             if time.time() - self.last_detection_time < 0.5:  # Use cache for 0.5 seconds
@@ -827,6 +938,10 @@ class RaspberryPiFaceDetector:
                             
                             # Draw detections with names
                             frame = self.draw_detections(frame, boxes, scores, self.last_names)
+                            
+                            # Send detection event to n8n if enabled
+                            if self.n8n_client and len(boxes) > 0:
+                                self.send_detection_event(boxes, scores, self.last_names, frame)
                 
                 # Calculate FPS
                 self.calculate_fps()

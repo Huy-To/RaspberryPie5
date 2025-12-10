@@ -298,6 +298,98 @@ class Config:
 - Install library: `python3 -m pip install --break-system-packages face_recognition`
 - Note: Building dlib can take 10-30 minutes on Raspberry Pi
 
+## 🔌 n8n Integration API
+
+The system includes a FastAPI server for sending detection events to n8n workflows.
+
+### Configuration
+
+Enable n8n integration in `raspberry_pi_face_detection.py`:
+
+```python
+class Config:
+    # Enable n8n webhook integration
+    ENABLE_N8N_INTEGRATION = True
+    N8N_WEBHOOK_URL = "http://n8n.local:5678/webhook/abc123"  # Your n8n webhook URL
+    
+    # Optional: Start FastAPI server
+    API_SERVER_ENABLED = True
+    API_SERVER_HOST = "0.0.0.0"
+    API_SERVER_PORT = 8000
+    API_FRAME_STORAGE_DIR = "frames"
+    API_FRAME_BASE_URL = "http://raspberrypi.local:8000/frames"  # Optional
+    CAMERA_ID = "raspberry_pi_camera"
+```
+
+### Event Schema
+
+Events sent to n8n follow this JSON schema:
+
+```json
+{
+  "camera_id": "raspberry_pi_camera",
+  "event_type": "face_detected",
+  "timestamp": "2024-01-15T10:30:45.123456",
+  "detections": [
+    {
+      "label": "face",
+      "confidence": 0.95,
+      "bbox": [100, 150, 200, 250],
+      "name": "John Doe"
+    }
+  ],
+  "frame_url": "http://raspberrypi.local:8000/frames/frame_20240115_103045.jpg",
+  "metadata": {
+    "frame_count": 1234,
+    "fps": 15.5
+  }
+}
+```
+
+### API Endpoints
+
+**POST /event** - Receive detection events (called internally)
+- Accepts detection event JSON
+- Forwards to n8n webhook
+
+**POST /training-clip** - Accept training clip metadata
+- Accepts clip path, metadata, optional preview frame
+- Forwards to n8n webhook
+
+**GET /health** - Health check endpoint
+- Returns API status and webhook configuration
+
+**GET /** - API information
+- Returns available endpoints
+
+### Standalone API Server
+
+You can also run the API server standalone:
+
+```bash
+python3 api_server.py --webhook-url "http://n8n.local:5678/webhook/abc123" --port 8000
+```
+
+### n8n Webhook Setup
+
+1. Create a webhook node in your n8n workflow
+2. Copy the webhook URL
+3. Configure it in `raspberry_pi_face_detection.py`:
+   ```python
+   N8N_WEBHOOK_URL = "http://your-n8n-instance:5678/webhook/your-webhook-id"
+   ```
+
+### Event Types
+
+- `face_detected` - Sent when faces are detected
+- `training_clip_ready` - Sent when training clips are ready (via `/training-clip` endpoint)
+
+### Frame Storage
+
+- Frames are saved to `frames/` directory by default
+- Old frames are automatically cleaned up (keeps last 100)
+- Frame URLs are included in events if `API_FRAME_BASE_URL` is configured
+
 ## 🎮 Controls
 
 **Display Window:**

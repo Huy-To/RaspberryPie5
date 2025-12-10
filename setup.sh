@@ -229,6 +229,21 @@ else
 fi
 set -e  # Re-enable exit on error
 
+# Install FastAPI and dependencies (for n8n API integration)
+echo "   Installing FastAPI and dependencies (for n8n integration)..."
+set +e  # Don't exit on error for FastAPI (it's optional)
+if python3 -m pip install --no-cache-dir --break-system-packages --no-warn-script-location fastapi uvicorn httpx pydantic 2>&1 | tee /tmp/fastapi_install.log; then
+    echo "✅ FastAPI installed successfully"
+    FASTAPI_INSTALLED=true
+else
+    echo ""
+    echo "⚠️  FastAPI installation failed"
+    echo "   n8n API integration will not work until FastAPI is installed"
+    echo "   Try manually: python3 -m pip install --break-system-packages fastapi uvicorn httpx pydantic"
+    FASTAPI_INSTALLED=false
+fi
+set -e  # Re-enable exit on error
+
 # Verify installations
 echo "🔍 Verifying installations..."
 
