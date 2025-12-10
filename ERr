@@ -74,3 +74,5 @@ INFO:     127.0.0.1:47502 - "GET / HTTP/1.1" 200 OK
 INFO:     127.0.0.1:47502 - "GET /favicon.ico HTTP/1.1" 404 Not Found
 
 
+WEBHOOK: https://6ggkissei8ctfmonsox9d8tz.hooks.n8n.cloud/webhook/b666a94f-f3be-4f52-83c1-2cf687be6e73
+
