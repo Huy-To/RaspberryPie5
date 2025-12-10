@@ -184,4 +184,14 @@ TypeError: unsupported format string passed to numpy.ndarray.__format__
 
 
 
+pi@raspberrypi:~ $ sudo npm install -g n8n
+npm error code ENOTEMPTY
+npm error syscall rename
+npm error path /usr/lib/node_modules/n8n
+npm error dest /usr/lib/node_modules/.n8n-seyU16Gs
+npm error errno -39
+npm error ENOTEMPTY: directory not empty, rename '/usr/lib/node_modules/n8n' -> '/usr/lib/node_modules/.n8n-seyU16Gs'
+npm error A complete log of this run can be found in: /root/.npm/_logs/2025-12-10T10_26_04_511Z-debug-0.log
+
+
 
