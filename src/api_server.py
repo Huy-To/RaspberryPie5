@@ -580,7 +580,8 @@ if FASTAPI_AVAILABLE:
                 "metadata": {
                     **metadata_dict,
                     "alert_source": "api_endpoint",
-                    "alert_type": "unknown_person"
+                    "alert_type": "unknown_person",
+                    "message": "Alien Detected"
                 }
             }
             

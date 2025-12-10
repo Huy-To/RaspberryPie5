@@ -106,9 +106,9 @@ class Config:
     MAX_QUEUE_SIZE = 3
     
     # Display settings
-    SHOW_FPS = True
-    SHOW_DETECTION_INFO = True
-    SHOW_PERFORMANCE_STATS = True
+    SHOW_FPS = False  # Disabled - no text overlays
+    SHOW_DETECTION_INFO = False  # Disabled - no text overlays
+    SHOW_PERFORMANCE_STATS = False  # Disabled - no text overlays
     PRINT_TO_CONSOLE = True  # Print detection info to console
     
     # Face recognition settings
@@ -117,8 +117,8 @@ class Config:
     ENABLE_FACE_RECOGNITION = True  # Set to False to disable recognition
     
     # API/n8n integration settings
-    ENABLE_N8N_INTEGRATION = False  # Set to True to enable n8n webhook integration
-    N8N_WEBHOOK_URL = ""  # n8n webhook URL (e.g., "http://n8n.local:5678/webhook/abc123")
+    ENABLE_N8N_INTEGRATION = False  # Set to True to enable n8n webhook integration (auto-enabled if alerts are enabled)
+    N8N_WEBHOOK_URL = "https://huyto002.app.n8n.cloud/webhook/5314c1d4-5ffc-4d3d-8e07-c05b9e8140a5"  # n8n webhook URL
     API_SERVER_ENABLED = False  # Set to True to start FastAPI server
     API_SERVER_HOST = "0.0.0.0"
     API_SERVER_PORT = 8000
@@ -328,6 +328,15 @@ class RaspberryPiFaceDetector:
     
     def initialize_api_integration(self):
         """Initialize API and n8n integration"""
+        # Auto-enable n8n integration if unknown/verified person alerts are enabled
+        if (self.config.ENABLE_UNKNOWN_PERSON_ALERTS or self.config.ENABLE_VERIFIED_PERSON_ALERTS) and not self.config.ENABLE_N8N_INTEGRATION:
+            if self.config.N8N_WEBHOOK_URL:
+                print("ℹ️  Auto-enabling n8n integration for unknown/verified person alerts")
+                self.config.ENABLE_N8N_INTEGRATION = True
+            else:
+                print("⚠️  Unknown/Verified person alerts enabled but N8N_WEBHOOK_URL not configured")
+                print("   Alerts will not be sent. Set N8N_WEBHOOK_URL in config to enable.")
+        
         if not self.config.ENABLE_N8N_INTEGRATION and not self.config.API_SERVER_ENABLED:
             return
         
@@ -421,6 +430,9 @@ class RaspberryPiFaceDetector:
         """
         Send alert for unknown person detection with captured image
         
+        Automatically sends to n8n when unknown person is detected.
+        This function will auto-initialize n8n client if needed.
+        
         Args:
             boxes: List of bounding boxes for unknown faces
             scores: List of confidence scores
@@ -429,8 +441,57 @@ class RaspberryPiFaceDetector:
         if not self.config.ENABLE_UNKNOWN_PERSON_ALERTS:
             return
         
-        if not self.n8n_client or len(boxes) == 0 or not self.create_detection_event:
+        if len(boxes) == 0:
             return
+        
+        # Auto-initialize n8n client if webhook URL is configured but client not initialized
+        if not self.n8n_client:
+            if self.config.N8N_WEBHOOK_URL:
+                # Try to initialize n8n client if webhook URL is configured
+                print("ℹ️  Auto-initializing n8n client for unknown person alert...")
+                try:
+                    from api_server import N8NWebhookClient, FrameStorageManager, create_detection_event
+                    self.n8n_client = N8NWebhookClient(webhook_url=self.config.N8N_WEBHOOK_URL)
+                    
+                    # Initialize frame storage if not already done
+                    if not self.api_frame_storage and self.config.API_FRAME_STORAGE_DIR:
+                        self.api_frame_storage = FrameStorageManager(
+                            storage_dir=self.config.API_FRAME_STORAGE_DIR,
+                            base_url=self.config.API_FRAME_BASE_URL
+                        )
+                    
+                    # Initialize create_detection_event if not already done
+                    if not self.create_detection_event:
+                        self.create_detection_event = create_detection_event
+                    
+                    print(f"✅ n8n client auto-initialized: {self.config.N8N_WEBHOOK_URL}")
+                except ImportError as e:
+                    print(f"❌ Failed to import API modules: {e}")
+                    print("   Install with: python3 -m pip install --break-system-packages fastapi uvicorn httpx")
+                    return
+                except Exception as e:
+                    print(f"❌ Failed to initialize n8n client: {e}")
+                    return
+            else:
+                print("⚠️  Unknown person detected but N8N_WEBHOOK_URL not configured")
+                print("   Set N8N_WEBHOOK_URL in config to enable automatic alerts")
+                return
+        
+        if not self.create_detection_event:
+            print("⚠️  create_detection_event not available. Attempting to initialize...")
+            try:
+                from api_server import create_detection_event, FrameStorageManager
+                self.create_detection_event = create_detection_event
+                
+                # Initialize frame storage if not already done
+                if not self.api_frame_storage and self.config.API_FRAME_STORAGE_DIR:
+                    self.api_frame_storage = FrameStorageManager(
+                        storage_dir=self.config.API_FRAME_STORAGE_DIR,
+                        base_url=self.config.API_FRAME_BASE_URL
+                    )
+            except Exception as e:
+                print(f"❌ Error initializing detection event creator: {e}")
+                return
         
         try:
             import hashlib
@@ -506,14 +567,15 @@ class RaspberryPiFaceDetector:
                     "fps": self.current_fps,
                     "alert_type": "unknown_person",
                     "count": len(unknown_detections),
-                    "cooldown_seconds": self.config.UNKNOWN_PERSON_ALERT_COOLDOWN
+                    "cooldown_seconds": self.config.UNKNOWN_PERSON_ALERT_COOLDOWN,
+                    "message": "Alien Detected"
                 }
             )
             
             # Send to n8n
             self.n8n_client.send_event(event, async_send=True)
             
-            print(f"🚨 Unknown person alert sent: {len(unknown_detections)} unknown face(s) detected")
+            print(f"🚨 Alien Detected! Alert sent: {len(unknown_detections)} unknown face(s) detected")
         
         except Exception as e:
             print(f"⚠️  Error sending unknown person alert: {e}")
@@ -928,10 +990,11 @@ class RaspberryPiFaceDetector:
                 # Choose color based on recognition
                 if name != "Unknown" and self.face_recognition_enabled:
                     box_color = self.config.RECOGNIZED_COLOR
-                    label = f"{name} ({score:.2f})"
                 else:
                     box_color = self.config.UNKNOWN_COLOR if self.face_recognition_enabled else self.config.BOX_COLOR
-                    label = f"{name}: {score:.2f}" if self.face_recognition_enabled else f"Face: {score:.2f}"
+                
+                # Only show accuracy (confidence score) as percentage
+                label = f"{score:.1%}"
                 
                 # Draw bounding box
                 draw.rectangle([x1, y1, x2, y2], outline=box_color, width=2)
@@ -1143,37 +1206,39 @@ class RaspberryPiFaceDetector:
                             # Draw detections with names
                             frame = self.draw_detections(frame, boxes, scores, self.last_names)
                             
-                            # Send detection event to n8n if enabled
+                            # Send detection event to n8n if enabled (general events)
                             if self.n8n_client and len(boxes) > 0:
                                 self.send_detection_event(boxes, scores, self.last_names, frame)
+                            
+                            # Check for verified persons and send alert (95%+ confidence)
+                            # This runs independently of general n8n integration
+                            if self.config.ENABLE_VERIFIED_PERSON_ALERTS and len(boxes) > 0:
+                                # Filter for verified faces (high confidence, recognized)
+                                verified_boxes = []
+                                verified_scores = []
+                                verified_names = []
+                                for i, (name, score) in enumerate(zip(self.last_names, scores)):
+                                    if name and name != "Unknown" and float(score) >= self.config.VERIFIED_PERSON_CONFIDENCE_THRESHOLD:
+                                        verified_boxes.append(boxes[i])
+                                        verified_scores.append(scores[i])
+                                        verified_names.append(name)
                                 
-                                # Check for verified persons and send alert (95%+ confidence)
-                                if self.config.ENABLE_VERIFIED_PERSON_ALERTS:
-                                    # Filter for verified faces (high confidence, recognized)
-                                    verified_boxes = []
-                                    verified_scores = []
-                                    verified_names = []
-                                    for i, (name, score) in enumerate(zip(self.last_names, scores)):
-                                        if name and name != "Unknown" and float(score) >= self.config.VERIFIED_PERSON_CONFIDENCE_THRESHOLD:
-                                            verified_boxes.append(boxes[i])
-                                            verified_scores.append(scores[i])
-                                            verified_names.append(name)
-                                    
-                                    if len(verified_boxes) > 0:
-                                        self.send_verified_person_alert(verified_boxes, verified_scores, verified_names, frame)
+                                if len(verified_boxes) > 0:
+                                    self.send_verified_person_alert(verified_boxes, verified_scores, verified_names, frame)
+                            
+                            # Check for unknown persons and send alert
+                            # This runs independently and automatically sends to n8n when triggered
+                            if self.config.ENABLE_UNKNOWN_PERSON_ALERTS and len(boxes) > 0:
+                                # Filter for unknown faces
+                                unknown_boxes = []
+                                unknown_scores = []
+                                for i, name in enumerate(self.last_names):
+                                    if name == "Unknown" or name is None:
+                                        unknown_boxes.append(boxes[i])
+                                        unknown_scores.append(scores[i])
                                 
-                                # Check for unknown persons and send alert
-                                if self.config.ENABLE_UNKNOWN_PERSON_ALERTS:
-                                    # Filter for unknown faces
-                                    unknown_boxes = []
-                                    unknown_scores = []
-                                    for i, name in enumerate(self.last_names):
-                                        if name == "Unknown" or name is None:
-                                            unknown_boxes.append(boxes[i])
-                                            unknown_scores.append(scores[i])
-                                    
-                                    if len(unknown_boxes) > 0:
-                                        self.send_unknown_person_alert(unknown_boxes, unknown_scores, frame)
+                                if len(unknown_boxes) > 0:
+                                    self.send_unknown_person_alert(unknown_boxes, unknown_scores, frame)
                         except queue.Empty:
                             # Use cached results if no new results available
                             if time.time() - self.last_detection_time < 0.5:  # Use cache for 0.5 seconds
@@ -1212,43 +1277,45 @@ class RaspberryPiFaceDetector:
                             # Draw detections with names
                             frame = self.draw_detections(frame, boxes, scores, self.last_names)
                             
-                            # Send detection event to n8n if enabled
+                            # Send detection event to n8n if enabled (general events)
                             if self.n8n_client and len(boxes) > 0:
                                 self.send_detection_event(boxes, scores, self.last_names, frame)
+                            
+                            # Check for verified persons and send alert (95%+ confidence)
+                            # This runs independently of general n8n integration
+                            if self.config.ENABLE_VERIFIED_PERSON_ALERTS and len(boxes) > 0:
+                                # Filter for verified faces (high confidence, recognized)
+                                verified_boxes = []
+                                verified_scores = []
+                                verified_names = []
+                                for i, (name, score) in enumerate(zip(self.last_names, scores)):
+                                    if name and name != "Unknown" and float(score) >= self.config.VERIFIED_PERSON_CONFIDENCE_THRESHOLD:
+                                        verified_boxes.append(boxes[i])
+                                        verified_scores.append(scores[i])
+                                        verified_names.append(name)
                                 
-                                # Check for verified persons and send alert (95%+ confidence)
-                                if self.config.ENABLE_VERIFIED_PERSON_ALERTS:
-                                    # Filter for verified faces (high confidence, recognized)
-                                    verified_boxes = []
-                                    verified_scores = []
-                                    verified_names = []
-                                    for i, (name, score) in enumerate(zip(self.last_names, scores)):
-                                        if name and name != "Unknown" and float(score) >= self.config.VERIFIED_PERSON_CONFIDENCE_THRESHOLD:
-                                            verified_boxes.append(boxes[i])
-                                            verified_scores.append(scores[i])
-                                            verified_names.append(name)
-                                    
-                                    if len(verified_boxes) > 0:
-                                        self.send_verified_person_alert(verified_boxes, verified_scores, verified_names, frame)
+                                if len(verified_boxes) > 0:
+                                    self.send_verified_person_alert(verified_boxes, verified_scores, verified_names, frame)
+                            
+                            # Check for unknown persons and send alert
+                            # This runs independently and automatically sends to n8n when triggered
+                            if self.config.ENABLE_UNKNOWN_PERSON_ALERTS and len(boxes) > 0:
+                                # Filter for unknown faces
+                                unknown_boxes = []
+                                unknown_scores = []
+                                for i, name in enumerate(self.last_names):
+                                    if name == "Unknown" or name is None:
+                                        unknown_boxes.append(boxes[i])
+                                        unknown_scores.append(scores[i])
                                 
-                                # Check for unknown persons and send alert
-                                if self.config.ENABLE_UNKNOWN_PERSON_ALERTS:
-                                    # Filter for unknown faces
-                                    unknown_boxes = []
-                                    unknown_scores = []
-                                    for i, name in enumerate(self.last_names):
-                                        if name == "Unknown" or name is None:
-                                            unknown_boxes.append(boxes[i])
-                                            unknown_scores.append(scores[i])
-                                    
-                                    if len(unknown_boxes) > 0:
-                                        self.send_unknown_person_alert(unknown_boxes, unknown_scores, frame)
+                                if len(unknown_boxes) > 0:
+                                    self.send_unknown_person_alert(unknown_boxes, unknown_scores, frame)
                 
                 # Calculate FPS
                 self.calculate_fps()
                 
-                # Add performance information
-                frame = self.add_performance_info(frame)
+                # Performance information disabled - no text overlays
+                # frame = self.add_performance_info(frame)
                 
                 # Print to console if enabled
                 if self.config.PRINT_TO_CONSOLE and should_process:

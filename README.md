@@ -156,7 +156,8 @@ class Config:
 - **[API Guide](docs/API_GUIDE.md)** - Quick start guide for API usage
 - **[API Reference](docs/API_REFERENCE.md)** - Complete API endpoint documentation
 - **[Command API Guide](docs/COMMAND_API.md)** - Guide for sending commands from n8n to the system
-- **[Unknown Person API Guide](docs/UNKNOWN_PERSON_API_GUIDE.md)** - How to send unknown person alerts to n8n
+- **[Automatic Unknown Person Alerts](docs/AUTO_UNKNOWN_PERSON_ALERTS.md)** - Auto-send alerts to n8n when unknown person detected ⭐
+- **[Unknown Person API Guide](docs/UNKNOWN_PERSON_API_GUIDE.md)** - Manual API usage for unknown person alerts
 
 ## 🛠️ Troubleshooting
 
