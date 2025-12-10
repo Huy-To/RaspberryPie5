@@ -57,3 +57,20 @@ pi@raspberrypi:~/RaspberryPie5 $ ./run.sh
 ./run.sh: line 11: /home/pi/RaspberryPie5/scripts/run.sh: Permission denied
 ./run.sh: line 11: exec: /home/pi/RaspberryPie5/scripts/run.sh: cannot execute: Permission denied
 
+
+
+pi@raspberrypi:~/RaspberryPie5 $ ./run_api.sh
+🚀 Starting API Server...
+========================
+⚠️  n8n webhook URL not configured - events will not be sent
+🚀 Starting API server on 0.0.0.0:8000
+   Webhook URL: Not configured
+   Frame storage: /home/pi/RaspberryPie5/frames
+INFO:     Started server process [15979]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+INFO:     Uvicorn running on http://0.0.0.0:8000 (Press CTRL+C to quit)
+INFO:     127.0.0.1:47502 - "GET / HTTP/1.1" 200 OK
+INFO:     127.0.0.1:47502 - "GET /favicon.ico HTTP/1.1" 404 Not Found
+
+
