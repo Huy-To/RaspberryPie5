@@ -7,6 +7,10 @@
 cd RaspberryPie5
 chmod +x scripts/setup.sh
 ./scripts/setup.sh
+
+# If you see permission errors after setup:
+chmod +x fix_permissions.sh
+./fix_permissions.sh
 ```
 
 ### Step 2: Run Face Detection

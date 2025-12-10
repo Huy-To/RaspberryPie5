@@ -159,8 +159,9 @@ The setup script will install all required dependencies:
 1. Checks Python version
 2. Updates package list
 3. Installs system dependencies (libcap-dev, build tools, etc.)
-4. Installs Python packages (ultralytics, picamera2, face_recognition, etc.)
-5. Verifies installations
+4. Installs Python packages (ultralytics, picamera2, face_recognition, python-multipart, etc.)
+5. Makes all scripts executable
+6. Verifies installations
 
 **Expected time:** 10-30 minutes depending on internet speed
 
@@ -168,6 +169,19 @@ The setup script will install all required dependencies:
 
 ```bash
 ./scripts/fix_libcap.sh
+```
+
+**If you see permission errors after setup, run:**
+
+```bash
+chmod +x run.sh run_api.sh run_enroll.sh scripts/*.sh src/*.py
+```
+
+Or use the fix script:
+
+```bash
+chmod +x fix_permissions.sh
+./fix_permissions.sh
 ```
 
 ### Step 3: Verify Installation

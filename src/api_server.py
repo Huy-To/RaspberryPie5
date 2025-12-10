@@ -46,7 +46,7 @@ if FASTAPI_AVAILABLE:
         """Single detection object"""
         label: str = Field(..., description="Detection label (e.g., 'face', 'person')")
         confidence: float = Field(..., ge=0.0, le=1.0, description="Confidence score 0-1")
-        bbox: List[float] = Field(..., min_items=4, max_items=4, description="Bounding box [x1, y1, x2, y2]")
+        bbox: List[float] = Field(..., min_length=4, max_length=4, description="Bounding box [x1, y1, x2, y2]")
         name: Optional[str] = Field(None, description="Recognized name if face recognition enabled")
     
     class DetectionEvent(BaseModel):

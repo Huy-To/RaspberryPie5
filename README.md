@@ -164,6 +164,19 @@ sudo usermod -aG video $USER
 
 # Fix numpy compatibility
 ./scripts/fix_numpy.sh
+
+# Fix script permissions
+chmod +x fix_permissions.sh
+./fix_permissions.sh
+```
+
+### API Server Issues
+```bash
+# Install missing python-multipart
+python3 -m pip install --break-system-packages python-multipart
+
+# Fix Pydantic warnings (update code)
+# Code has been updated to use min_length/max_length
 ```
 
 ### Path Issues

@@ -232,17 +232,25 @@ set -e  # Re-enable exit on error
 # Install FastAPI and dependencies (for n8n API integration)
 echo "   Installing FastAPI and dependencies (for n8n integration)..."
 set +e  # Don't exit on error for FastAPI (it's optional)
-if python3 -m pip install --no-cache-dir --break-system-packages --no-warn-script-location fastapi uvicorn httpx pydantic 2>&1 | tee /tmp/fastapi_install.log; then
+if python3 -m pip install --no-cache-dir --break-system-packages --no-warn-script-location fastapi uvicorn httpx pydantic python-multipart 2>&1 | tee /tmp/fastapi_install.log; then
     echo "✅ FastAPI installed successfully"
     FASTAPI_INSTALLED=true
 else
     echo ""
     echo "⚠️  FastAPI installation failed"
     echo "   n8n API integration will not work until FastAPI is installed"
-    echo "   Try manually: python3 -m pip install --break-system-packages fastapi uvicorn httpx pydantic"
+    echo "   Try manually: python3 -m pip install --break-system-packages fastapi uvicorn httpx pydantic python-multipart"
     FASTAPI_INSTALLED=false
 fi
 set -e  # Re-enable exit on error
+
+# Make all scripts executable
+echo "🔧 Making scripts executable..."
+cd "$(dirname "$0")/.." || exit 1
+chmod +x run.sh run_api.sh run_enroll.sh 2>/dev/null || true
+chmod +x scripts/*.sh 2>/dev/null || true
+chmod +x src/*.py 2>/dev/null || true
+echo "✅ Scripts made executable"
 
 # Verify installations
 echo "🔍 Verifying installations..."
@@ -311,10 +319,12 @@ fi
 
 # Check if model file exists
 echo "🤖 Checking for YOLO model..."
-if [ -f "yolov12n-face.pt" ]; then
-    echo "✅ YOLO model found: yolov12n-face.pt"
+cd "$PROJECT_ROOT" || exit 1
+if [ -f "models/yolov12n-face.pt" ]; then
+    echo "✅ YOLO model found: models/yolov12n-face.pt"
 else
-    echo "❌ YOLO model not found. Please ensure yolov12n-face.pt is in the current directory."
+    echo "❌ YOLO model not found. Please ensure yolov12n-face.pt is in models/ directory."
+    echo "   Expected: $PROJECT_ROOT/models/yolov12n-face.pt"
     echo "   You can download it from: https://github.com/ultralytics/assets/releases"
     exit 1
 fi
@@ -322,7 +332,8 @@ fi
 # Test camera access (non-blocking - just a warning if it fails)
 echo "📹 Testing camera access..."
 set +e  # Temporarily disable exit on error for camera test
-if python3 test_camera.py 2>/dev/null; then
+cd "$PROJECT_ROOT" || exit 1
+if python3 src/test_camera.py 2>/dev/null; then
     echo "✅ Camera test passed - everything is working!"
 else
     echo "⚠️  Camera test failed, but this is OK if:"
@@ -331,15 +342,17 @@ else
     echo ""
     echo "   To test manually:"
     echo "   - System test: rpicam-hello"
-    echo "   - Python test: python3 test_camera.py"
+    echo "   - Python test: python3 src/test_camera.py"
 fi
 set -e  # Re-enable exit on error
 
-# Make scripts executable
-echo "🔐 Making scripts executable..."
-chmod +x setup.sh
-chmod +x run.sh
-chmod +x raspberry_pi_face_detection.py
+# Make scripts executable (already done earlier, but ensure it's done)
+echo "🔐 Ensuring scripts are executable..."
+cd "$PROJECT_ROOT" || exit 1
+chmod +x run.sh run_api.sh run_enroll.sh 2>/dev/null || true
+chmod +x scripts/*.sh 2>/dev/null || true
+chmod +x src/*.py 2>/dev/null || true
+echo "✅ All scripts are executable"
 
 echo ""
 echo "✅ Setup complete!"
@@ -348,7 +361,7 @@ echo "📋 Quick Start:"
 echo "   Run: ./run.sh"
 echo ""
 echo "   Or directly:"
-echo "   python3 raspberry_pi_face_detection.py"
+echo "   python3 src/raspberry_pi_face_detection.py"
 echo ""
 echo "📝 PATH Configuration:"
 echo "   ~/.local/bin has been added to your PATH"
