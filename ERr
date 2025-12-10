@@ -1,0 +1,37 @@
+pi@raspberrypi:~/RaspberryPie5 $ ./run_api.sh
+🚀 Starting API Server...
+========================
+/home/pi/RaspberryPie5/src/api_server.py:49: PydanticDeprecatedSince20: `min_items` is deprecated and will be removed, use `min_length` instead. Deprecated in Pydantic V2.0 to be removed in V3.0. See Pydantic V2 Migration Guide at https://errors.pydantic.dev/2.12/migration/
+  bbox: List[float] = Field(..., min_items=4, max_items=4, description="Bounding box [x1, y1, x2, y2]")
+/home/pi/RaspberryPie5/src/api_server.py:49: PydanticDeprecatedSince20: `max_items` is deprecated and will be removed, use `max_length` instead. Deprecated in Pydantic V2.0 to be removed in V3.0. See Pydantic V2 Migration Guide at https://errors.pydantic.dev/2.12/migration/
+  bbox: List[float] = Field(..., min_items=4, max_items=4, description="Bounding box [x1, y1, x2, y2]")
+Form data requires "python-multipart" to be installed. 
+You can install "python-multipart" with: 
+
+pip install python-multipart
+
+Traceback (most recent call last):
+  File "/home/pi/RaspberryPie5/src/api_server.py", line 309, in <module>
+    @app.post("/training-clip", response_model=Dict[str, Any])
+     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/pi/.local/lib/python3.11/site-packages/fastapi/routing.py", line 1128, in decorator
+    self.add_api_route(
+  File "/home/pi/.local/lib/python3.11/site-packages/fastapi/routing.py", line 1067, in add_api_route
+    route = route_class(
+            ^^^^^^^^^^^^
+  File "/home/pi/.local/lib/python3.11/site-packages/fastapi/routing.py", line 686, in __init__
+    self.dependant = get_dependant(
+                     ^^^^^^^^^^^^^^
+  File "/home/pi/.local/lib/python3.11/site-packages/fastapi/dependencies/utils.py", line 281, in get_dependant
+    param_details = analyze_param(
+                    ^^^^^^^^^^^^^^
+  File "/home/pi/.local/lib/python3.11/site-packages/fastapi/dependencies/utils.py", line 518, in analyze_param
+    ensure_multipart_is_installed()
+  File "/home/pi/.local/lib/python3.11/site-packages/fastapi/dependencies/utils.py", line 121, in ensure_multipart_is_installed
+    raise RuntimeError(multipart_not_installed_error) from None
+RuntimeError: Form data requires "python-multipart" to be installed. 
+You can install "python-multipart" with: 
+
+pip install python-multipart
+
+
